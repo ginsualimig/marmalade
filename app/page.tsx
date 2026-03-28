@@ -8,41 +8,42 @@ const sendTouchCommand = (type: string, payload?: unknown) => {
 };
 
 const touchButtons = [
-  { label: "Left", type: "move-start", payload: { direction: "left" }, isMovement: true },
-  { label: "Right", type: "move-start", payload: { direction: "right" }, isMovement: true },
-  { label: "Jump", type: "jump", isMovement: false },
-  { label: "Slash", type: "light-attack", isMovement: false },
-  { label: "Slam", type: "heavy-attack", isMovement: false },
-  { label: "Dragon", type: "dragon-special", isMovement: false }
+  { label: "⬅️ Run", type: "move-start", payload: { direction: "left" }, isMovement: true },
+  { label: "Run ➡️", type: "move-start", payload: { direction: "right" }, isMovement: true },
+  { label: "🦘 Jump", type: "jump", isMovement: false },
+  { label: "✨ Slash", type: "light-attack", isMovement: false },
+  { label: "💥 Slam", type: "heavy-attack", isMovement: false },
+  { label: "🐉 Dragon", type: "dragon-special", isMovement: false }
 ];
 
 export default function Page() {
   return (
-    <main className="max-w-6xl mx-auto py-6 px-4 space-y-6">
-      <section className="rounded-3xl border border-white/20 bg-white/5 p-6 shadow-2xl shadow-purple-900/40">
-        <h1 className="text-4xl font-semibold tracking-wide text-center text-white">Marmalade: Tiny Guardian</h1>
-        <p className="mt-2 text-center text-sm text-white/70">
-          Play a short boss-rush where Charlotte and George test reflexes, spelling goals, and visible math-gate challenges.
+    <main className="max-w-6xl mx-auto py-6 px-4 space-y-5">
+      <section className="kid-card p-6">
+        <h1 className="text-4xl md:text-5xl font-black tracking-wide text-center text-white">Marmalade: Tiny Guardian</h1>
+        <p className="mt-3 text-center text-base md:text-lg text-white/90">
+          Colorful boss adventure for kids: collect letters to spell words, grab numbers to solve math gates, and unleash fun attacks.
         </p>
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-black/30 p-4">
+      <section className="kid-frame p-3 md:p-4">
         <PhaserGame />
       </section>
 
-      <section className="grid md:grid-cols-2 gap-4 text-sm text-white/80">
-        <article className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-          <h2 className="text-lg font-semibold text-white">Gameplay Notes</h2>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Use keyboard or touch buttons for move, jump, slash, slam, and dragon special.</li>
-            <li>HP/MP bars show vitality while combo + score track momentum.</li>
-            <li>Follow the HUD word challenge: snag letter orbs in order while dodging the highlighted letters, then align the math gate prompt to keep combos alive.</li>
-            <li>Bosses swap through Charlotte (shield & toys) then George (spin & puddles).</li>
+      <section className="grid md:grid-cols-2 gap-4 text-white">
+        <article className="kid-card p-4 space-y-2">
+          <h2 className="text-xl font-extrabold text-white">How to win ⭐</h2>
+          <ul className="list-disc list-inside space-y-1 text-white/95">
+            <li>Move + jump, then use Slash / Slam / Dragon.</li>
+            <li>Collect letters in order to spell the target word.</li>
+            <li>Pick numbers that are greater than or equal to the number rule.</li>
+            <li>Use Math Bank to pass the glowing math gate.</li>
+            <li>Beat Charlotte, then George.</li>
           </ul>
         </article>
-        <article className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-          <h2 className="text-lg font-semibold text-white">Touch Controls</h2>
-          <p className="text-white/60">Hold a move button to keep running; tap the attacks to trigger.</p>
+        <article className="kid-card p-4 space-y-2">
+          <h2 className="text-xl font-extrabold text-white">Touch controls 🎮</h2>
+          <p className="text-white/90">Hold Run buttons. Tap action buttons.</p>
           <div className="touch-controls">
             {touchButtons.map((button) => (
               <button

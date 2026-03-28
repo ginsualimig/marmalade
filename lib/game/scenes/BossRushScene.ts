@@ -23,7 +23,7 @@ const WORDS = [
 
 const LETTER_POOL = ["A", "C", "D", "E", "G", "H", "L", "M", "N", "O", "P", "R", "S", "T", "W"];
 
-const WORD_COLLECTION_TARGETS = ["MATH", "CODE", "GLOW"];
+const WORD_COLLECTION_TARGETS = ["MATH", "PLAY", "GLOW"];
 
 
 type AttackStyle = "light" | "heavy" | "dragon";
@@ -206,20 +206,31 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private createWorld() {
     const skyGradient = this.add.graphics();
-    skyGradient.fillGradientStyle(0x0f0a2c, 0x1d1746, 0x110a34, 0x050014, 1);
+    skyGradient.fillGradientStyle(0x6b2cff, 0xff6fc2, 0x2f1263, 0x130427, 1);
     skyGradient.fillRect(0, 0, 800, 600);
 
-    for (let i = 0; i < 22; i++) {
-      this.add
-        .circle(Phaser.Math.Between(20, 780), Phaser.Math.Between(20, 260), Phaser.Math.Between(1, 3), 0xffffff, 0.45)
+    for (let i = 0; i < 26; i++) {
+      const star = this.add
+        .circle(Phaser.Math.Between(20, 780), Phaser.Math.Between(20, 280), Phaser.Math.Between(2, 6), 0xffffff, 0.45)
         .setDepth(0);
+      this.tweens.add({
+        targets: star,
+        alpha: 0.1,
+        duration: Phaser.Math.Between(800, 1900),
+        yoyo: true,
+        repeat: -1
+      });
     }
 
-    this.add.rectangle(400, 545, 820, 120, 0x2b1450, 0.6).setDepth(0);
+    this.add.ellipse(170, 130, 160, 110, 0xffe59b, 0.32).setDepth(0);
+    this.add.ellipse(660, 160, 130, 90, 0x90f6ff, 0.26).setDepth(0);
+    this.add.rectangle(400, 536, 820, 146, 0x41156a, 0.55).setDepth(0);
+    this.add.rectangle(400, 570, 820, 46, 0x7aff9f, 0.14).setDepth(0);
     this.ground = this.add
-      .rectangle(400, 588, 820, 24, 0x3a1f5b)
+      .rectangle(400, 588, 820, 24, 0x8cff95)
       .setOrigin(0.5)
-      .setDepth(1);
+      .setDepth(1)
+      .setAlpha(0.45);
     this.physics.add.existing(this.ground, true);
   }
 
@@ -260,24 +271,35 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private buildPlayerAvatar() {
-    const cape = this.add.triangle(0, 0, -10, 6, -42, 30, -12, 42, 0xff6a90, 0.85);
-    const body = this.add.ellipse(0, 16, 44, 56, 0xffc573, 1).setStrokeStyle(2, 0xffe9c7);
-    const head = this.add.circle(0, -20, 18, 0xffd8a4, 1).setStrokeStyle(2, 0xfff0d1);
-    const eyeLeft = this.add.circle(-6, -22, 2.5, 0x2b1a34, 1);
-    const eyeRight = this.add.circle(6, -22, 2.5, 0x2b1a34, 1);
-    const sword = this.add.rectangle(22, 8, 8, 34, 0xfff2a3, 0.9).setAngle(24);
-    return this.add.container(this.player.x, this.player.y - 10, [cape, body, head, eyeLeft, eyeRight, sword]).setDepth(4);
+    const cape = this.add.triangle(0, 0, -12, 4, -48, 28, -12, 46, 0xff4da5, 0.9);
+    const body = this.add.ellipse(0, 16, 46, 58, 0xffbe6f, 1).setStrokeStyle(3, 0xffefd0);
+    const head = this.add.circle(0, -22, 21, 0xffdca7, 1).setStrokeStyle(3, 0xfff3d8);
+    const cheekLeft = this.add.circle(-10, -18, 4, 0xff8db5, 0.8);
+    const cheekRight = this.add.circle(10, -18, 4, 0xff8db5, 0.8);
+    const eyeLeft = this.add.circle(-7, -24, 3.8, 0x2b1a34, 1);
+    const eyeRight = this.add.circle(7, -24, 3.8, 0x2b1a34, 1);
+    const eyeSparkL = this.add.circle(-6, -26, 1.5, 0xffffff, 1);
+    const eyeSparkR = this.add.circle(8, -26, 1.5, 0xffffff, 1);
+    const sword = this.add.rectangle(24, 8, 9, 38, 0xfff2a3, 0.95).setAngle(24);
+    return this.add
+      .container(this.player.x, this.player.y - 10, [cape, body, head, cheekLeft, cheekRight, eyeLeft, eyeRight, eyeSparkL, eyeSparkR, sword])
+      .setDepth(4);
   }
 
   private buildBossAvatar(bossColor: number) {
-    const crown = this.add.triangle(0, -58, -20, 0, 0, -22, 20, 0, 0xfff09f, 1);
-    const body = this.add.ellipse(0, 12, 106, 122, bossColor, 0.95).setStrokeStyle(3, 0xffffff, 0.45);
-    const cheekLeft = this.add.circle(-24, -4, 10, 0xffffff, 0.18);
-    const cheekRight = this.add.circle(24, -4, 10, 0xffffff, 0.18);
-    const eyeLeft = this.add.circle(-16, -14, 5, 0x112233, 1);
-    const eyeRight = this.add.circle(16, -14, 5, 0x112233, 1);
-    const mouth = this.add.ellipse(0, 14, 30, 12, 0x0f1a26, 0.55);
-    return this.add.container(this.boss.x, this.boss.y - 2, [crown, body, cheekLeft, cheekRight, eyeLeft, eyeRight, mouth]).setDepth(3);
+    const crown = this.add.triangle(0, -62, -22, 2, 0, -26, 22, 2, 0xfff09f, 1).setStrokeStyle(2, 0xffffff, 0.4);
+    const body = this.add.ellipse(0, 12, 116, 132, bossColor, 0.95).setStrokeStyle(4, 0xffffff, 0.55);
+    const tummy = this.add.ellipse(0, 26, 56, 42, 0xffffff, 0.18);
+    const cheekLeft = this.add.circle(-24, -6, 11, 0xffc3df, 0.7);
+    const cheekRight = this.add.circle(24, -6, 11, 0xffc3df, 0.7);
+    const eyeLeft = this.add.circle(-16, -16, 7, 0x112233, 1);
+    const eyeRight = this.add.circle(16, -16, 7, 0x112233, 1);
+    const eyeSparkL = this.add.circle(-14, -18, 2, 0xffffff, 0.95);
+    const eyeSparkR = this.add.circle(18, -18, 2, 0xffffff, 0.95);
+    const mouth = this.add.ellipse(0, 16, 34, 14, 0x0f1a26, 0.6);
+    return this.add
+      .container(this.boss.x, this.boss.y - 2, [crown, body, tummy, cheekLeft, cheekRight, eyeLeft, eyeRight, eyeSparkL, eyeSparkR, mouth])
+      .setDepth(3);
   }
 
   private syncCharacterAvatars() {
@@ -297,41 +319,47 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.hpBar = this.add.graphics();
     this.mpBar = this.add.graphics();
     this.hpValueText = this.add
-      .text(16, 6, `HP ${this.playerHP}/${PLAYER_HP_MAX}`, {
-        fontSize: "12px",
-        color: "#ff9ea0"
+      .text(16, 4, `❤️ HP ${this.playerHP}/${PLAYER_HP_MAX}`, {
+        fontSize: "16px",
+        color: "#ffd4dd",
+        fontStyle: "bold"
       })
       .setDepth(2);
     this.mpValueText = this.add
-      .text(16, 48, `MP ${this.playerMP}/${PLAYER_MP_MAX}`, {
-        fontSize: "12px",
-        color: "#8fdcff"
+      .text(16, 44, `✨ MP ${this.playerMP}/${PLAYER_MP_MAX}`, {
+        fontSize: "16px",
+        color: "#c2f4ff",
+        fontStyle: "bold"
       })
       .setDepth(2);
     this.bossHealthBar = this.add.graphics();
     this.bossHealthText = this.add
-      .text(400, 6, `${this.currentBoss?.name} HP: ${this.bossHP}/${this.bossMaxHP}`, {
-        fontSize: "15px",
-        color: "#ffd37f"
+      .text(400, 6, `👑 ${this.currentBoss?.name} HP: ${this.bossHP}/${this.bossMaxHP}`, {
+        fontSize: "18px",
+        color: "#fff6ad",
+        fontStyle: "bold"
       })
       .setOrigin(0.5, 0)
       .setDepth(2);
     this.comboText = this.add
-      .text(16, 76, `Combo x${this.comboCount}`, {
-        color: "#ffd37f",
-        fontSize: "16px"
+      .text(16, 78, `🔥 Combo x${this.comboCount}`, {
+        color: "#ffe290",
+        fontSize: "20px",
+        fontStyle: "bold"
       })
       .setDepth(2);
     this.scoreText = this.add
-      .text(16, 102, `Score: ${this.score}`, {
-        color: "#85f2ff",
-        fontSize: "16px"
+      .text(16, 106, `⭐ Score: ${this.score}`, {
+        color: "#a9f8ff",
+        fontSize: "20px",
+        fontStyle: "bold"
       })
       .setDepth(2);
     this.highScoreText = this.add
-      .text(640, 6, `High Score: ${this.highScore}`, {
-        fontSize: "15px",
-        color: "#90f2ff"
+      .text(610, 8, `🏆 ${this.highScore}`, {
+        fontSize: "20px",
+        color: "#b7f7ff",
+        fontStyle: "bold"
       })
       .setOrigin(0, 0)
       .setDepth(2);
@@ -355,7 +383,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
       })
       .setDepth(2);
 
-    this.add.rectangle(650, 520, 280, 130, 0x071126, 0.78).setStrokeStyle(2, 0x4cc7ff, 0.45).setDepth(1.8);
+    this.add.rectangle(650, 520, 290, 140, 0x111a33, 0.9).setStrokeStyle(3, 0x93f3ff, 0.75).setDepth(1.8);
     this.objectiveText = this.add
       .text(520, 468, "", {
         fontSize: "13px",
@@ -659,6 +687,10 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private handleBossDefeated() {
     this.isTransitioning = true;
+    playAudioCue("reward");
+    this.spawnSparkBurst(this.boss.x, this.boss.y - 20, 0xfff18f);
+    this.spawnSparkBurst(this.boss.x + 36, this.boss.y, 0xff9cea);
+    this.spawnSparkBurst(this.boss.x - 36, this.boss.y, 0x95ecff);
     advanceBossIndex();
     globalGameState.score = this.score;
     globalGameState.playerHP = this.playerHP;
@@ -667,7 +699,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.bossTimer?.remove();
     this.bossPrepEvent?.remove(false);
     this.clearBossPrepSignal();
-    this.scene.start("CutsceneScene", { bossName: this.currentBoss?.name });
+    this.time.delayedCall(420, () => this.scene.start("CutsceneScene", { bossName: this.currentBoss?.name }));
   }
 
   private startBossLoop() {
@@ -900,68 +932,86 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private spawnLetterOrb() {
     if (!this.letterGroup) return;
     const letter = Phaser.Utils.Array.GetRandom(LETTER_POOL);
+    const x = Phaser.Math.Between(50, 750);
+    const halo = this.add.circle(x, -10, 28, 0xfff173, 0.28).setStrokeStyle(3, 0xffffff, 0.6);
     const orb = this.add
-      .text(Phaser.Math.Between(50, 750), -10, letter, {
-        fontSize: "18px",
-        fontStyle: "bold",
+      .text(x, -10, letter, {
+        fontSize: "30px",
+        fontStyle: "900",
         color: "#2b1a12",
         backgroundColor: "#fff082",
-        padding: { left: 8, right: 8, top: 4, bottom: 4 }
+        padding: { left: 14, right: 14, top: 8, bottom: 8 }
       })
       .setOrigin(0.5)
-      .setStroke("#ffffff", 1);
+      .setStroke("#ffffff", 3)
+      .setDepth(2.5);
     this.physics.add.existing(orb);
     orb.setData("letter", letter);
+    orb.setData("halo", halo);
     const body = orb.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(0, 140);
+    body.setVelocity(0, 160);
     body.setBounce(0.2);
     this.letterGroup.add(orb);
+    this.tweens.add({ targets: [orb, halo], scale: 1.08, duration: 460, yoyo: true, repeat: -1 });
   }
 
   private handleLetterCollision(playerObj: ArcadePhysicsObject, orbObj: ArcadePhysicsObject) {
     const orb = orbObj as Phaser.GameObjects.Text;
+    const halo = orb.getData("halo") as Phaser.GameObjects.Arc | undefined;
     const letter = String(orb.getData("letter") ?? "").toUpperCase();
     this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 14);
     this.comboCount += 1;
-    this.comboText.setText(`Combo x${this.comboCount}`);
+    this.comboText.setText(`🔥 Combo x${this.comboCount}`);
     this.processLetterForWord(letter);
-    this.addScore(4, 0xfff082, { x: orb.x, y: orb.y });
+    this.addScore(8, 0xfff082, { x: orb.x, y: orb.y });
+    this.spawnSparkBurst(orb.x, orb.y, 0xfff082);
+    playAudioCue("reward");
+    halo?.destroy();
     orb.destroy();
   }
 
   private spawnNumberHazard() {
     if (!this.numberGroup) return;
     const value = Phaser.Math.Between(1, 9);
+    const x = Phaser.Math.Between(80, 720);
+    const bubble = this.add.circle(x, -12, 24, 0x92ebff, 0.36).setStrokeStyle(3, 0xffffff, 0.8);
     const numberLabel = this.add
-      .text(Phaser.Math.Between(80, 720), -12, `${value}`, {
-        fontSize: "20px",
-        color: "#95e3ff",
-        fontStyle: "bold"
+      .text(x, -12, `${value}`, {
+        fontSize: "32px",
+        color: "#10315f",
+        fontStyle: "900"
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(2.5);
     this.physics.add.existing(numberLabel);
     numberLabel.setData("value", value);
+    numberLabel.setData("bubble", bubble);
     const body = numberLabel.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(0, 120 + Math.random() * 70);
+    body.setVelocity(0, 135 + Math.random() * 70);
     this.numberGroup.add(numberLabel);
+    this.tweens.add({ targets: [numberLabel, bubble], scale: 1.07, duration: 500, yoyo: true, repeat: -1 });
   }
 
   private handleNumberCollision(playerObj: ArcadePhysicsObject, numberObj: ArcadePhysicsObject) {
     const numberLabel = numberObj as Phaser.GameObjects.Text;
+    const bubble = numberLabel.getData("bubble") as Phaser.GameObjects.Arc | undefined;
     const value = Number(numberLabel.getData("value")) || 0;
     if (value >= this.numberComparisonTarget) {
       this.mathBank = Math.min(40, this.mathBank + value);
-      this.addScore(value * 3, 0x95e3ff, { x: numberLabel.x, y: numberLabel.y });
+      this.addScore(value * 4, 0x95e3ff, { x: numberLabel.x, y: numberLabel.y });
       this.comboCount += 2;
-      this.displayBreach(`Great pick! +${value} to Math Bank`);
+      playAudioCue("math");
+      this.displayBreach(`Great pick! +${value} Math`);
+      this.spawnSparkBurst(numberLabel.x, numberLabel.y, 0x95e3ff);
     } else {
       this.mathBank = Math.max(0, this.mathBank - value);
       this.applyPlayerDamage(7);
       this.comboCount = Math.max(0, this.comboCount - 1);
-      this.displayBreach(`Oops! -${value} from Math Bank`);
+      this.displayBreach(`Oops! -${value} Math`);
     }
-    this.comboText.setText(`Combo x${Math.max(1, this.comboCount)}`);
+    this.comboText.setText(`🔥 Combo x${Math.max(1, this.comboCount)}`);
     this.numberComparisonTarget = Phaser.Math.Between(2, 8);
+    bubble?.destroy();
     numberObj.destroy();
     this.updateEducationalText();
   }
@@ -971,8 +1021,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.mathGateTarget = Phaser.Math.Between(12, 20);
     this.mathGateEquation = this.createMathEquation(this.mathGateTarget);
     this.mathGate = this.add
-      .rectangle(400, 240, 200, 40, 0x8ce5ff, 0.2)
-      .setStrokeStyle(2, 0x8ce5ff);
+      .rectangle(400, 240, 280, 58, 0x8ce5ff, 0.3)
+      .setStrokeStyle(4, 0xffffff, 0.9);
     this.physics.add.existing(this.mathGate, true);
     this.tweens.add({
       targets: this.mathGate,
@@ -995,11 +1045,13 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const equation = this.mathGateEquation || `${this.mathGateTarget}`;
     if (this.mathBank >= this.mathGateTarget) {
       this.mathBank -= this.mathGateTarget;
-      this.addScore(22, 0x8ce5ff, { x: this.mathGate?.x ?? 400, y: this.mathGate?.y ?? 240 });
+      this.addScore(30, 0x8ce5ff, { x: this.mathGate?.x ?? 400, y: this.mathGate?.y ?? 240 });
       this.comboCount += 2;
       this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 12);
-      this.displayBreach("Math gate solved! Bonus score + MP.");
-      this.showEducationalMessage(`Solved! ${equation} = ${this.mathGateTarget}. Math Bank spent.`);
+      this.displayBreach("Math gate solved! 🌟");
+      this.showEducationalMessage(`Solved! ${equation} = ${this.mathGateTarget}.`);
+      playAudioCue("math");
+      this.spawnSparkBurst(this.mathGate?.x ?? 400, this.mathGate?.y ?? 240, 0x8ce5ff);
     } else {
       this.applyPlayerDamage(5);
       this.comboCount = Math.max(1, Math.floor(this.comboCount / 2));
@@ -1054,9 +1106,12 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private completeWordCollection() {
     const completed = this.getCurrentCollectionWord();
-    this.addScore(completed.length * 6, 0xfff082, { x: 400, y: 520 });
-    this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 18);
-    this.showEducationalMessage(`Word complete! ${completed} bonus: MP + score.`);
+    this.addScore(completed.length * 10, 0xfff082, { x: 400, y: 520 });
+    this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 20);
+    this.showEducationalMessage(`WORD COMPLETE! ${completed} 🎉`);
+    playAudioCue("reward");
+    this.spawnSparkBurst(400, 520, 0xfff082);
+    this.spawnSparkBurst(440, 500, 0xffb6f2);
     this.currentWordIndex = (this.currentWordIndex + 1) % this.wordCollectionTargets.length;
     this.wordProgress = 0;
     this.updateEducationalText();
@@ -1132,24 +1187,24 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private updateUI() {
     this.hpBar.clear();
     this.hpBar.fillStyle(0x21142f, 1);
-    this.hpBar.fillRoundedRect(16, 16, 230, 12, 4);
+    this.hpBar.fillRoundedRect(16, 20, 250, 14, 5);
     this.hpBar.fillStyle(0xff4d6d, 1);
-    this.hpBar.fillRoundedRect(16, 16, Phaser.Math.Clamp((this.playerHP / PLAYER_HP_MAX) * 230, 0, 230), 12, 4);
-    this.hpValueText?.setText(`HP ${Math.max(0, this.playerHP)}/${PLAYER_HP_MAX}`);
+    this.hpBar.fillRoundedRect(16, 20, Phaser.Math.Clamp((this.playerHP / PLAYER_HP_MAX) * 250, 0, 250), 14, 5);
+    this.hpValueText?.setText(`❤️ HP ${Math.max(0, this.playerHP)}/${PLAYER_HP_MAX}`);
 
     this.mpBar.clear();
     this.mpBar.fillStyle(0x131238, 1);
-    this.mpBar.fillRoundedRect(16, 32, 230, 8, 3);
+    this.mpBar.fillRoundedRect(16, 38, 250, 12, 4);
     this.mpBar.fillStyle(0x4cc7ff, 1);
-    this.mpBar.fillRoundedRect(16, 32, Phaser.Math.Clamp((this.playerMP / PLAYER_MP_MAX) * 230, 0, 230), 8, 3);
-    this.mpValueText?.setText(`MP ${Math.max(0, this.playerMP)}/${PLAYER_MP_MAX}`);
+    this.mpBar.fillRoundedRect(16, 38, Phaser.Math.Clamp((this.playerMP / PLAYER_MP_MAX) * 250, 0, 250), 12, 4);
+    this.mpValueText?.setText(`✨ MP ${Math.max(0, this.playerMP)}/${PLAYER_MP_MAX}`);
 
     this.bossHealthBar.clear();
     this.bossHealthBar.fillStyle(0x15152a, 1);
     this.bossHealthBar.fillRoundedRect(300, 12, 240, 12, 4);
     this.bossHealthBar.fillStyle(0xff9ae8, 1);
     this.bossHealthBar.fillRoundedRect(300, 12, Phaser.Math.Clamp((this.bossHP / Math.max(1, this.bossMaxHP)) * 240, 0, 240), 12, 4);
-    this.bossHealthText?.setText(`${this.currentBoss?.name} HP: ${Math.max(0, this.bossHP)}/${this.bossMaxHP}`);
+    this.bossHealthText?.setText(`👑 ${this.currentBoss?.name} HP: ${Math.max(0, this.bossHP)}/${this.bossMaxHP}`);
   }
 
   private spawnSparkBurst(x: number, y: number, tint: number) {
@@ -1319,11 +1374,17 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     });
     this.letterGroup?.getChildren().forEach((child: GameObjectWithY) => {
       if (child.y > 620) {
+        const textChild = child as Phaser.GameObjects.Text;
+        const halo = textChild.getData("halo") as Phaser.GameObjects.Arc | undefined;
+        halo?.destroy();
         child.destroy();
       }
     });
     this.numberGroup?.getChildren().forEach((child: GameObjectWithY) => {
       if (child.y > 620) {
+        const textChild = child as Phaser.GameObjects.Text;
+        const bubble = textChild.getData("bubble") as Phaser.GameObjects.Arc | undefined;
+        bubble?.destroy();
         child.destroy();
       }
     });
