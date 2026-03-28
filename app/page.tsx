@@ -22,7 +22,7 @@ export default function Page() {
       <section className="rounded-3xl border border-white/20 bg-white/5 p-6 shadow-2xl shadow-purple-900/40">
         <h1 className="text-4xl font-semibold tracking-wide text-center text-white">Marmalade: Tiny Guardian</h1>
         <p className="mt-2 text-center text-sm text-white/70">
-          Play a short boss-rush where Charlotte and George test your reflexes and basic math/letter smarts.
+          Play a short boss-rush where Charlotte and George test reflexes, spelling goals, and visible math-gate challenges.
         </p>
       </section>
 
@@ -37,7 +37,7 @@ export default function Page() {
             <li>Use keyboard or touch buttons for move, jump, slash, slam, and dragon special.</li>
             <li>HP/MP bars show vitality while combo + score track momentum.</li>
             <li>Follow the HUD word challenge: snag letter orbs in order while dodging the highlighted letters, then align the math gate prompt to keep combos alive.</li>
-            <li>Bosss swap through Charlotte (shield & toys) then George (spin & puddles).</li>
+            <li>Bosses swap through Charlotte (shield & toys) then George (spin & puddles).</li>
           </ul>
         </article>
         <article className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">

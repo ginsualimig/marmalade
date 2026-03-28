@@ -79,8 +79,10 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   return class BossRushScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle;
   private playerBody!: Phaser.Physics.Arcade.Body;
+  private playerAvatar?: Phaser.GameObjects.Container;
   private boss!: Phaser.GameObjects.Rectangle;
   private bossBody!: Phaser.Physics.Arcade.Body;
+  private bossAvatar?: Phaser.GameObjects.Container;
   private ground!: Phaser.GameObjects.Rectangle;
 
   private hpBar!: Phaser.GameObjects.Graphics;
@@ -90,6 +92,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private bossNameText!: Phaser.GameObjects.Text;
   private bossPhaseText!: Phaser.GameObjects.Text;
   private eduText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyLight!: Phaser.Input.Keyboard.Key;
@@ -140,16 +143,20 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private currentWordIndex = 0;
   private wordProgress = 0;
   private mathGateEquation = "";
+  private mathBank = 0;
   private educationalTip?: Phaser.GameObjects.Text;
   private educationalTipTimer?: Phaser.Time.TimerEvent;
 
   private touchState = { left: false, right: false };
+  private isTransitioning = false;
+  private managedEvents: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
     super({ key: "BossRushScene" });
   }
 
   create() {
+    this.isTransitioning = false;
     globalGameState.isGameOver = false;
 
     if (globalGameState.bossIndex >= BOSS_DEFINITIONS.length) {
@@ -163,6 +170,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.playerMP = globalGameState.playerMP;
     this.score = globalGameState.score;
     this.comboCount = globalGameState.combo;
+    this.mathBank = 0;
 
     this.highScore = getHighScore();
 
@@ -181,26 +189,42 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.scheduleEducationalEvents();
     this.startBossLoop();
     this.startMPRegen();
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanupScene, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanupScene, this);
   }
 
   update() {
     this.handleMovement();
     this.handleAttacks();
     this.cleanupOutOfBounds();
+    this.syncCharacterAvatars();
     this.updateUI();
     this.updateBossAura();
     this.updateActionCue();
   }
 
   private createWorld() {
+    const skyGradient = this.add.graphics();
+    skyGradient.fillGradientStyle(0x0f0a2c, 0x1d1746, 0x110a34, 0x050014, 1);
+    skyGradient.fillRect(0, 0, 800, 600);
+
+    for (let i = 0; i < 22; i++) {
+      this.add
+        .circle(Phaser.Math.Between(20, 780), Phaser.Math.Between(20, 260), Phaser.Math.Between(1, 3), 0xffffff, 0.45)
+        .setDepth(0);
+    }
+
+    this.add.rectangle(400, 545, 820, 120, 0x2b1450, 0.6).setDepth(0);
     this.ground = this.add
-      .rectangle(400, 588, 820, 24, 0x2d1244)
-      .setOrigin(0.5);
+      .rectangle(400, 588, 820, 24, 0x3a1f5b)
+      .setOrigin(0.5)
+      .setDepth(1);
     this.physics.add.existing(this.ground, true);
   }
 
   private createPlayer() {
-    this.player = this.add.rectangle(140, 520, 38, 60, 0xffc573);
+    this.player = this.add.rectangle(140, 520, 38, 60, 0xffffff, 0.01);
     this.playerFacing = "right";
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
@@ -211,12 +235,13 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.playerBody.setDragX(800);
     this.playerBody.setGravityY(900);
     this.player.setDepth(2);
+    this.playerAvatar = this.buildPlayerAvatar();
     this.physics.add.collider(this.player, this.ground);
   }
 
   private createBoss() {
     const bossColor = this.currentBoss?.color ?? 0xff5c8d;
-    this.boss = this.add.rectangle(650, 470, 100, 120, bossColor);
+    this.boss = this.add.rectangle(650, 470, 100, 120, bossColor, 0.01);
     this.bossAura = this.add
       .ellipse(this.boss.x, this.boss.y, 180, 120, bossColor, 0.2)
       .setStrokeStyle(2, 0xffffff, 0.2)
@@ -227,10 +252,45 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.bossBody.setImmovable(true);
     this.bossBody.setCollideWorldBounds(true);
     this.bossBody.setGravityY(900);
+    this.bossAvatar = this.buildBossAvatar(bossColor);
     this.physics.add.collider(this.boss, this.ground);
 
     this.bossHP = this.currentBoss?.maxHP ?? 120;
     this.bossMaxHP = this.bossHP;
+  }
+
+  private buildPlayerAvatar() {
+    const cape = this.add.triangle(0, 0, -10, 6, -42, 30, -12, 42, 0xff6a90, 0.85);
+    const body = this.add.ellipse(0, 16, 44, 56, 0xffc573, 1).setStrokeStyle(2, 0xffe9c7);
+    const head = this.add.circle(0, -20, 18, 0xffd8a4, 1).setStrokeStyle(2, 0xfff0d1);
+    const eyeLeft = this.add.circle(-6, -22, 2.5, 0x2b1a34, 1);
+    const eyeRight = this.add.circle(6, -22, 2.5, 0x2b1a34, 1);
+    const sword = this.add.rectangle(22, 8, 8, 34, 0xfff2a3, 0.9).setAngle(24);
+    return this.add.container(this.player.x, this.player.y - 10, [cape, body, head, eyeLeft, eyeRight, sword]).setDepth(4);
+  }
+
+  private buildBossAvatar(bossColor: number) {
+    const crown = this.add.triangle(0, -58, -20, 0, 0, -22, 20, 0, 0xfff09f, 1);
+    const body = this.add.ellipse(0, 12, 106, 122, bossColor, 0.95).setStrokeStyle(3, 0xffffff, 0.45);
+    const cheekLeft = this.add.circle(-24, -4, 10, 0xffffff, 0.18);
+    const cheekRight = this.add.circle(24, -4, 10, 0xffffff, 0.18);
+    const eyeLeft = this.add.circle(-16, -14, 5, 0x112233, 1);
+    const eyeRight = this.add.circle(16, -14, 5, 0x112233, 1);
+    const mouth = this.add.ellipse(0, 14, 30, 12, 0x0f1a26, 0.55);
+    return this.add.container(this.boss.x, this.boss.y - 2, [crown, body, cheekLeft, cheekRight, eyeLeft, eyeRight, mouth]).setDepth(3);
+  }
+
+  private syncCharacterAvatars() {
+    if (this.playerAvatar && this.player) {
+      this.playerAvatar.setPosition(this.player.x, this.player.y - 10);
+      const facingScale = this.playerFacing === "right" ? 1 : -1;
+      this.playerAvatar.setScale(facingScale, 1);
+    }
+    if (this.bossAvatar && this.boss) {
+      const pulse = 1 + Math.sin(this.time.now / 260) * 0.02;
+      this.bossAvatar.setPosition(this.boss.x, this.boss.y - 2);
+      this.bossAvatar.setScale(pulse);
+    }
   }
 
   private createUI() {
@@ -289,12 +349,22 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
       })
       .setOrigin(0.5, 0.5);
     this.eduText = this.add
-      .text(16, 520, "", {
+      .text(16, 500, "", {
         fontSize: "14px",
         color: "#dff5ff"
       })
       .setDepth(2);
+
+    this.add.rectangle(650, 520, 280, 130, 0x071126, 0.78).setStrokeStyle(2, 0x4cc7ff, 0.45).setDepth(1.8);
+    this.objectiveText = this.add
+      .text(520, 468, "", {
+        fontSize: "13px",
+        color: "#c7f6ff",
+        wordWrap: { width: 250 }
+      })
+      .setDepth(2);
     this.updateUI();
+    this.updateEducationalText();
   }
 
   private createGroups() {
@@ -378,17 +448,12 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.playerBody.setVelocityX(velocityX);
     if (velocityX < 0) {
       this.playerFacing = "left";
-      this.player.setFillStyle(0xffb052);
     } else if (velocityX > 0) {
       this.playerFacing = "right";
-      this.player.setFillStyle(0xffd27a);
-    } else {
-      this.player.setFillStyle(0xffc573);
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
       this.performJump();
-      this.player.setFillStyle(0xfff2a3);
     }
   }
 
@@ -585,15 +650,15 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private triggerHitFlash() {
-    this.boss.setFillStyle(0xffffff);
-    this.time.delayedCall(80, () => {
-      if (this.currentBoss) {
-        this.boss.setFillStyle(this.currentBoss.color);
-      }
+    if (!this.bossAvatar) return;
+    this.bossAvatar.setAlpha(0.45);
+    this.time.delayedCall(90, () => {
+      this.bossAvatar?.setAlpha(1);
     });
   }
 
   private handleBossDefeated() {
+    this.isTransitioning = true;
     advanceBossIndex();
     globalGameState.score = this.score;
     globalGameState.playerHP = this.playerHP;
@@ -714,29 +779,35 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.bossPhaseText.setText("Spin tantrum!");
     const color = 0x4dd0ff;
     for (let i = 0; i < count; i++) {
-      this.time.delayedCall(i * 120, () => {
+      this.scheduleManagedCall(i * 120, () => {
+        if (!this.scene.isActive() || this.isTransitioning) return;
         const angle = (i / count) * Math.PI * 2;
         const projectile = this.add.circle(this.boss.x, this.boss.y, 10, color, 0.9);
         this.physics.add.existing(projectile);
         const body = projectile.body as Phaser.Physics.Arcade.Body;
-        body.setVelocity(Math.cos(angle) * 220, Math.sin(angle) * 220 - 15);
-        body.setBounce(0.4);
-        body.setGravityY(320);
-        body.setCollideWorldBounds(true);
+        body.setVelocity(Math.cos(angle) * 240, Math.sin(angle) * 240);
+        body.setAllowGravity(false);
+        body.setCollideWorldBounds(false);
         this.hazardGroup?.add(projectile);
-        this.time.delayedCall(2600, () => {
-          projectile.destroy();
+        this.trimHazardCount();
+        this.tweens.add({
+          targets: projectile,
+          alpha: 0,
+          duration: 1700,
+          ease: "Quad.easeIn",
+          onComplete: () => projectile.destroy()
         });
       });
     }
   }
 
   private launchGeorgeSpinWave() {
-    if (!this.player) return;
+    if (!this.player || this.isTransitioning) return;
     this.bossPhaseText.setText("Drool wave!");
     const wave = this.add.rectangle(this.player.x, 600, 260, 16, 0x15ffa0, 0.5);
     this.physics.add.existing(wave, true);
     this.hazardGroup?.add(wave);
+    this.trimHazardCount();
     this.tweens.add({
       targets: wave,
       width: 420,
@@ -744,7 +815,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
       duration: 760,
       ease: "Quad.easeOut"
     });
-    this.time.delayedCall(2500, () => {
+    this.scheduleManagedCall(2500, () => {
       wave.destroy();
     });
   }
@@ -758,25 +829,28 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private launchProjectile(type: string, speed: number, color: number) {
-    if (!this.player) return;
-    const radius = 12;
+    if (!this.player || this.isTransitioning) return;
+    const radius = type === "diagonal" ? 10 : 12;
     const spawnX = this.boss.x - 20;
     const spawnY = this.boss.y - 20;
     const projectile = this.add.circle(spawnX, spawnY, radius, color);
     this.physics.add.existing(projectile);
     const body = projectile.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(-speed, -Phaser.Math.Between(30, 90));
-    body.setBounce(0.5);
-    body.setGravityY(450);
+    body.setBounce(type === "diagonal" ? 0.1 : 0.5);
+    body.setGravityY(type === "diagonal" ? 180 : 450);
     this.hazardGroup?.add(projectile);
+    this.trimHazardCount();
   }
 
   private spawnDroolPuddle() {
+    if (!this.player || this.isTransitioning) return;
     const width = 140;
     const puddle = this.add.rectangle(this.player.x, 580, width, 16, 0x96f7ff, 0.5);
     this.physics.add.existing(puddle, true);
     this.hazardGroup?.add(puddle);
-    this.time.delayedCall(4200, () => {
+    this.trimHazardCount();
+    this.scheduleManagedCall(4200, () => {
       puddle.destroy();
     });
   }
@@ -826,7 +900,16 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private spawnLetterOrb() {
     if (!this.letterGroup) return;
     const letter = Phaser.Utils.Array.GetRandom(LETTER_POOL);
-    const orb = this.add.circle(Phaser.Math.Between(50, 750), -10, 14, 0xfff082);
+    const orb = this.add
+      .text(Phaser.Math.Between(50, 750), -10, letter, {
+        fontSize: "18px",
+        fontStyle: "bold",
+        color: "#2b1a12",
+        backgroundColor: "#fff082",
+        padding: { left: 8, right: 8, top: 4, bottom: 4 }
+      })
+      .setOrigin(0.5)
+      .setStroke("#ffffff", 1);
     this.physics.add.existing(orb);
     orb.setData("letter", letter);
     const body = orb.body as Phaser.Physics.Arcade.Body;
@@ -836,7 +919,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private handleLetterCollision(playerObj: ArcadePhysicsObject, orbObj: ArcadePhysicsObject) {
-    const orb = orbObj as Phaser.GameObjects.Arc;
+    const orb = orbObj as Phaser.GameObjects.Text;
     const letter = String(orb.getData("letter") ?? "").toUpperCase();
     this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 14);
     this.comboCount += 1;
@@ -867,13 +950,15 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const numberLabel = numberObj as Phaser.GameObjects.Text;
     const value = Number(numberLabel.getData("value")) || 0;
     if (value >= this.numberComparisonTarget) {
+      this.mathBank = Math.min(40, this.mathBank + value);
       this.addScore(value * 3, 0x95e3ff, { x: numberLabel.x, y: numberLabel.y });
       this.comboCount += 2;
-      this.displayBreach("Great number pick!");
+      this.displayBreach(`Great pick! +${value} to Math Bank`);
     } else {
+      this.mathBank = Math.max(0, this.mathBank - value);
       this.applyPlayerDamage(7);
       this.comboCount = Math.max(0, this.comboCount - 1);
-      this.displayBreach("Oops! Watch the number.");
+      this.displayBreach(`Oops! -${value} from Math Bank`);
     }
     this.comboText.setText(`Combo x${Math.max(1, this.comboCount)}`);
     this.numberComparisonTarget = Phaser.Math.Between(2, 8);
@@ -907,18 +992,19 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private processMathGate() {
     if (!this.mathGate) return;
-    const gap = Math.abs(this.score - this.mathGateTarget);
     const equation = this.mathGateEquation || `${this.mathGateTarget}`;
-    if (gap <= 6) {
-      this.addScore(18, 0x8ce5ff, { x: this.mathGate?.x ?? 400, y: this.mathGate?.y ?? 240 });
-      this.comboCount += 1;
-      this.displayBreach("Math match! Combo boosted.");
-      this.showEducationalMessage(`Math gate success: ${equation} = ${this.mathGateTarget}`);
+    if (this.mathBank >= this.mathGateTarget) {
+      this.mathBank -= this.mathGateTarget;
+      this.addScore(22, 0x8ce5ff, { x: this.mathGate?.x ?? 400, y: this.mathGate?.y ?? 240 });
+      this.comboCount += 2;
+      this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 12);
+      this.displayBreach("Math gate solved! Bonus score + MP.");
+      this.showEducationalMessage(`Solved! ${equation} = ${this.mathGateTarget}. Math Bank spent.`);
     } else {
       this.applyPlayerDamage(5);
       this.comboCount = Math.max(1, Math.floor(this.comboCount / 2));
-      this.displayBreach("Math gate rebuffed!");
-      this.showEducationalMessage(`Keep practicing: ${equation} = ${this.mathGateTarget}`);
+      this.displayBreach("Math gate blocked: build Math Bank first.");
+      this.showEducationalMessage(`Need Math Bank ${this.mathGateTarget}. Current: ${this.mathBank}.`);
     }
     this.comboText.setText(`Combo x${Math.max(1, this.comboCount)}`);
     this.scoreText.setText(`Score: ${this.score}`);
@@ -1021,17 +1107,26 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const nextLetter = word[this.wordProgress] ?? "✔";
     const mathLine =
       this.mathGateTarget > 0
-        ? `Math prompt: ${this.mathGateEquation || this.mathGateTarget} = ${this.mathGateTarget}`
+        ? `Math gate equation: ${this.mathGateEquation || this.mathGateTarget} = ${this.mathGateTarget}`
         : "Math gate approaching soon.";
     const textLines = [
-      `Word task: Spell ${word} (${this.wordProgress}/${word.length}) → next: ${nextLetter}`,
-      mathLine,
-      `Pick numbers ≥ ${this.numberComparisonTarget}.`,
-      `Dodge words starting with ${this.wordDodgeLetter}.`,
-      `MP reserve: ${this.playerMP}/${PLAYER_MP_MAX}.`
+      `SPELLING: ${word} (${this.wordProgress}/${word.length}) | next letter: ${nextLetter}`,
+      `MATH: ${mathLine}`,
+      `MATH BANK: ${this.mathBank}/${this.mathGateTarget || "?"}`,
+      `NUMBER RULE: collect only numbers ≥ ${this.numberComparisonTarget}`,
+      `WORD DODGE: avoid words starting with ${this.wordDodgeLetter}`
     ];
     this.eduText?.setText(textLines.join("\n"));
 
+    const objectives = [
+      "LEARNING OBJECTIVES",
+      `• Spell ${word} by collecting letters in order`,
+      `• Build Math Bank with numbers, then clear gate ${this.mathGateTarget}`,
+      `• Current Bank: ${this.mathBank} | equation: ${this.mathGateEquation || "? + ?"}`,
+      `• Keep MP above 25 for Dragon reward burst`,
+      `• Correct numbers boost combo, wrong picks hurt HP`
+    ];
+    this.objectiveText?.setText(objectives.join("\n"));
   }
 
   private updateUI() {
@@ -1154,6 +1249,30 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     }
   }
 
+  private scheduleManagedCall(delay: number, callback: () => void) {
+    const event = this.time.delayedCall(delay, callback);
+    this.managedEvents.push(event);
+    return event;
+  }
+
+  private trimHazardCount(max = 42) {
+    const hazards = this.hazardGroup?.getChildren() ?? [];
+    if (hazards.length <= max) return;
+    const removable = hazards.slice(0, hazards.length - max);
+    removable.forEach((obj) => (obj as Phaser.GameObjects.GameObject).destroy());
+  }
+
+  private cleanupScene() {
+    this.isTransitioning = true;
+    this.bossTimer?.remove(false);
+    this.bossPrepEvent?.remove(false);
+    this.managedEvents.forEach((event) => event.remove(false));
+    this.managedEvents = [];
+    this.clearBossPrepSignal();
+    this.touchState.left = false;
+    this.touchState.right = false;
+  }
+
   private displayBreach(message: string) {
     const flash = this.add.text(400, 520, message, {
       fontSize: "18px",
@@ -1177,6 +1296,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private endGameOver() {
+    this.isTransitioning = true;
     globalGameState.score = this.score;
     globalGameState.playerHP = this.playerHP;
     globalGameState.playerMP = this.playerMP;
