@@ -1,4 +1,5 @@
 import type PhaserModule from "phaser";
+import { getHighScore } from "@/lib/game/persistence";
 
 export default function createTitleScene(Phaser: typeof PhaserModule) {
   return class TitleScene extends Phaser.Scene {
@@ -40,6 +41,14 @@ export default function createTitleScene(Phaser: typeof PhaserModule) {
       startButton.on("pointerdown", () => {
         this.scene.start("BossRushScene");
       });
+
+      const highScore = getHighScore();
+      this.add
+        .text(this.scale.width / 2, this.scale.height / 2 + 80, `High Score: ${highScore}`, {
+          fontSize: "18px",
+          color: "#8cf0ff"
+        })
+        .setOrigin(0.5);
 
       this.add
         .text(this.scale.width / 2, this.scale.height - 120, "Charlotte → George", {

@@ -1,5 +1,6 @@
 import type PhaserModule from "phaser";
 import { BOSS_DEFINITIONS } from "@/lib/game/data/bosses";
+import { getHighScore } from "@/lib/game/persistence";
 import { globalGameState } from "@/lib/game/state";
 
 export default function createCutsceneScene(Phaser: typeof PhaserModule) {
@@ -30,6 +31,14 @@ export default function createCutsceneScene(Phaser: typeof PhaserModule) {
       this.add
         .text(this.scale.width / 2, 330, `Score: ${globalGameState.score}`, {
           fontSize: "18px",
+          color: "#8cf0ff"
+        })
+        .setOrigin(0.5);
+
+      const highScore = getHighScore();
+      this.add
+        .text(this.scale.width / 2, 360, `High Score: ${highScore}`, {
+          fontSize: "16px",
           color: "#8cf0ff"
         })
         .setOrigin(0.5);

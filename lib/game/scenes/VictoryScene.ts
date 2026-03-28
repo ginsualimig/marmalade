@@ -1,4 +1,5 @@
 import type PhaserModule from "phaser";
+import { getHighScore } from "@/lib/game/persistence";
 import { globalGameState, resetGameState } from "@/lib/game/state";
 
 export default function createVictoryScene(Phaser: typeof PhaserModule) {
@@ -20,6 +21,14 @@ export default function createVictoryScene(Phaser: typeof PhaserModule) {
       this.add
         .text(this.scale.width / 2, 280, `Final score: ${globalGameState.score}`, {
           fontSize: "22px",
+          color: "#91e7ff"
+        })
+        .setOrigin(0.5);
+
+      const highScore = getHighScore();
+      this.add
+        .text(this.scale.width / 2, 320, `High Score: ${highScore}`, {
+          fontSize: "18px",
           color: "#91e7ff"
         })
         .setOrigin(0.5);
