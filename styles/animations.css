@@ -2,7 +2,8 @@
  * animations.css
  * 
  * Attack animation system - separated for clarity
- * Enhanced attack, hurt, projectile, and impact animations
+ * Enhanced attack, hurt, projectile, impact, wind-up, and particle animations
+ * Implements boss telegraphing, hit reactions, screen shake scaling, and particle bursts
  */
 
 /* ==========================================
@@ -286,4 +287,376 @@
 
 .battle-card.defeat-mode {
   animation: defeatFlash 0.9s ease-in-out infinite;
+}
+
+/* ==========================================
+   BOSS WIND-UP TELEGRAPHING (0.8s minimum)
+   Boss body tense, limbs glow, shows threat
+   ========================================== */
+
+@keyframes bossWindupTense {
+  0% {
+    transform: scale(1) translateY(0);
+    filter: brightness(1) saturate(1);
+  }
+  35% {
+    transform: scale(1.08) translateY(-4px);
+    filter: brightness(1.1) saturate(1.2);
+  }
+  70% {
+    transform: scale(1.06) translateY(-2px);
+    filter: brightness(1.08) saturate(1.15);
+  }
+  100% {
+    transform: scale(1.1) translateY(-3px);
+    filter: brightness(1.12) saturate(1.3);
+  }
+}
+
+@keyframes bossWindupReady {
+  0% {
+    transform: scale(1.1) translateY(-3px);
+    filter: brightness(1.12) saturate(1.3);
+    box-shadow: 0 0 0 0px rgba(255, 100, 100, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(255, 100, 100, 0.2);
+  }
+  100% {
+    transform: scale(1.1) translateY(-3px);
+    filter: brightness(1.12) saturate(1.3);
+    box-shadow: 0 0 0 0px rgba(255, 100, 100, 0);
+  }
+}
+
+@keyframes bossWindupAttack {
+  0% {
+    transform: scale(1.1) translateY(-3px);
+    filter: brightness(1.12) saturate(1.3);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+.boss-windup-tense {
+  animation: bossWindupTense 0.3s ease-in-out forwards !important;
+}
+
+.boss-windup-ready {
+  animation: bossWindupReady 0.5s ease-in-out infinite !important;
+}
+
+.boss-windup-attack {
+  animation: bossWindupAttack 0.15s ease-out forwards !important;
+}
+
+/* ==========================================
+   DIRECTIONAL ATTACK ARROW TELEGRAPH
+   Shows incoming attack direction
+   ========================================== */
+
+@keyframes arrowCharge {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes arrowFire {
+  0% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+.attack-arrow {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  font-size: 2rem;
+  z-index: 10;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.attack-arrow.charging {
+  animation: arrowCharge 1s ease-in-out infinite !important;
+}
+
+.attack-arrow.firing {
+  animation: arrowFire 0.3s ease-out forwards !important;
+}
+
+/* ==========================================
+   HIT REACTION: POP (on correct hit)
+   Character scales up satisfyingly
+   ========================================== */
+
+@keyframes hitReactionPopCorrect {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  25% {
+    transform: scale(1.18) translateY(-6px);
+    filter: brightness(1.15);
+  }
+  50% {
+    transform: scale(1.1) translateY(-3px);
+    filter: brightness(1.08);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    filter: brightness(1);
+  }
+}
+
+.hit-reaction-pop-correct {
+  animation: hitReactionPopCorrect 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+}
+
+/* ==========================================
+   HIT REACTION: RECOIL (on wrong hit)
+   Character gently recoils, constructive feedback
+   ========================================== */
+
+@keyframes hitReactionRecoilWrong {
+  0% {
+    transform: scale(1) translateX(0);
+    filter: brightness(1);
+  }
+  25% {
+    transform: scale(0.95) translateX(3px);
+    filter: brightness(0.95);
+  }
+  75% {
+    transform: scale(0.98) translateX(1px);
+    filter: brightness(0.98);
+  }
+  100% {
+    transform: scale(1) translateX(0);
+    filter: brightness(1);
+  }
+}
+
+.hit-reaction-recoil-wrong {
+  animation: hitReactionRecoilWrong 0.5s ease-out forwards !important;
+}
+
+/* ==========================================
+   SCREEN SHAKE TUNING: Ease-out, threat-scaled
+   Amplitude increases with boss threat level
+   ========================================== */
+
+@keyframes screenShakeDefault {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  14% {
+    transform: translate(-2px, 1px);
+  }
+  28% {
+    transform: translate(2px, -1px);
+  }
+  42% {
+    transform: translate(-1px, 1px);
+  }
+  56% {
+    transform: translate(1px, -1px);
+  }
+  70% {
+    transform: translate(-1px, 0px);
+  }
+  84% {
+    transform: translate(1px, 0px);
+  }
+}
+
+@keyframes screenShakeMedium {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  14% {
+    transform: translate(-4px, 2px);
+  }
+  28% {
+    transform: translate(4px, -2px);
+  }
+  42% {
+    transform: translate(-3px, 2px);
+  }
+  56% {
+    transform: translate(3px, -2px);
+  }
+  70% {
+    transform: translate(-2px, 0px);
+  }
+  84% {
+    transform: translate(2px, 0px);
+  }
+}
+
+@keyframes screenShakeHigh {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  14% {
+    transform: translate(-6px, 3px);
+  }
+  28% {
+    transform: translate(6px, -3px);
+  }
+  42% {
+    transform: translate(-5px, 3px);
+  }
+  56% {
+    transform: translate(5px, -3px);
+  }
+  70% {
+    transform: translate(-3px, 1px);
+  }
+  84% {
+    transform: translate(3px, -1px);
+  }
+}
+
+@keyframes screenShakeCritical {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  14% {
+    transform: translate(-8px, 4px);
+  }
+  28% {
+    transform: translate(8px, -4px);
+  }
+  42% {
+    transform: translate(-6px, 4px);
+  }
+  56% {
+    transform: translate(6px, -4px);
+  }
+  70% {
+    transform: translate(-4px, 2px);
+  }
+  84% {
+    transform: translate(4px, -2px);
+  }
+}
+
+.screen-shake {
+  animation: screenShakeDefault 0.45s ease-out forwards !important;
+}
+
+.screen-shake.screen-shake-medium {
+  animation: screenShakeMedium 0.45s ease-out forwards !important;
+}
+
+.screen-shake.screen-shake-high {
+  animation: screenShakeHigh 0.45s ease-out forwards !important;
+}
+
+.screen-shake.screen-shake-critical {
+  animation: screenShakeCritical 0.45s ease-out forwards !important;
+}
+
+/* ==========================================
+   PARTICLE BURSTS: Confetti & Sparkles
+   Satisfying feedback on hit/miss
+   ========================================== */
+
+@keyframes confettiBurst {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-60px) scale(0.2);
+  }
+}
+
+@keyframes sparkleFade {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+
+.particle-burst {
+  position: absolute;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.particle-burst.confetti {
+  animation: confettiBurst 1.2s ease-out forwards !important;
+  font-size: 1.2rem;
+}
+
+.particle-burst.sparkles {
+  animation: sparkleFade 1.2s ease-out forwards !important;
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+/* ==========================================
+   TRANSITION ANIMATIONS: Slide+Fade+Scale
+   Smooth state transitions (0.5–0.8s)
+   ========================================== */
+
+@keyframes slideInFadeScale {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.9);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes slideOutFadeScale {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(20px) scale(0.9);
+    filter: blur(3px);
+  }
+}
+
+.transition-slide-in {
+  animation: slideInFadeScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+}
+
+.transition-slide-out {
+  animation: slideOutFadeScale 0.6s ease-in forwards !important;
 }

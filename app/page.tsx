@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlayerCharacter, BossVisuals, ArenaEnvironment } from "@/components/CharacterVisuals";
+import { PlayerCharacter, BossVisuals, KeeperCharacter, GoldBurstParticle, BluePuffParticle, ArenaEnvironment } from "@/components/CharacterVisuals";
 import {
   clearHighScores,
   clearPreferredLevel,
@@ -22,11 +22,32 @@ import {
   saveRunSummaries,
   currentTimestamp,
   createRunId,
+  loadPowerLevels,
+  savePowerLevels,
+  updatePowerLevel,
+  getPowerLevelStage,
+  // Pedagogy layer
+  initializeSpacedRepetitionQueue,
+  initializeInterleavingState,
+  initializeHintTracker,
+  recordQuestionAttempt,
+  shouldShowHint,
+  shouldInjectDiversity,
+  getNextFamilyByPedagogy,
+  generateGrowthSummary,
+  loadDiagnostics,
+  saveDiagnostics,
+  clearDiagnostics,
   type DifficultyMode,
   type LearnerLevel,
   type ParentSettings,
   type RunSummary,
-  type StoredHighScores
+  type StoredHighScores,
+  type PowerLevelMap,
+  type PowerLevel,
+  type ConceptFamily,
+  type RunDiagnostics,
+  type GrowthSummary
 } from "@/lib/game/quizPersistence";
 import {
   createCharacter,
@@ -119,6 +140,24 @@ type BattleStats = {
   streak: number;
   maxStreak: number;
   skillProgress: Record<SkillArea, SkillProgress>;
+  livesRemaining: number;
+};
+
+/**
+ * Boss Phase System: 3 HP phases with escalating difficulty
+ * Phase 1: 75%-100% HP (difficulty baseline)
+ * Phase 2: 50%-75% HP (questions faster, +1 difficulty shift)
+ * Phase 3: 25%-50% HP (questions hardest, +2 difficulty shift)
+ * Critical: 0%-25% HP (boss nearly defeated, questions at max difficulty)
+ */
+type BossPhase = "phase-1" | "phase-2" | "phase-3" | "critical";
+
+const getBossPhase = (bossHp: number, maxHp: number): BossPhase => {
+  const percent = bossHp / maxHp;
+  if (percent > 0.75) return "phase-1";
+  if (percent > 0.5) return "phase-2";
+  if (percent > 0.25) return "phase-3";
+  return "critical";
 };
 
 type FeedbackType = {
@@ -139,6 +178,8 @@ type BattleState = {
   phase: "quiz" | "boss-defeated";
   lastHit: "player" | "boss" | null;
   stats: BattleStats;
+  bossPhase: BossPhase;
+  phaseSwitchNotification?: string;
 };
 
 const BOSSES: Boss[] = [
@@ -339,9 +380,11 @@ function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level:
   return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-unscramble", prompt: `Unscramble this word: ${scrambled}`, correct: word, options: uniqueOptions(word, distractors) }, level);
 }
 
-function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
+function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, bossPhase: BossPhase = "phase-1"): Question {
   const tuning = LEVEL_TUNING[level];
-  const max = Math.max(6, config.mathMax + tuning.mathShift);
+  // Boss phase scaling: add difficulty shift for later phases
+  const phaseShift = bossPhase === "phase-1" ? 0 : bossPhase === "phase-2" ? 1 : bossPhase === "phase-3" ? 2 : 3;
+  const max = Math.max(6, config.mathMax + tuning.mathShift + phaseShift);
   const a = Math.floor(Math.random() * max) + 1;
   const b = Math.floor(Math.random() * max) + 1;
 
@@ -379,8 +422,28 @@ function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode
   return withInputMode({ typeLabel: "Maths", skillArea: "math-add-subtract", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
 }
 
-function createQuestion(boss: Boss, round: number, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
-  return round % 2 === 0 ? createSpellingQuestion(config, mode, level) : createMathQuestion(boss, config, mode, level);
+/**
+ * Create a question with pedagogy awareness.
+ * Uses autonomy mode (maths/words/mix) to weight question selection.
+ * Uses spaced repetition and interleaving logic from diagnostics to choose concept family.
+ */
+function createQuestion(
+  boss: Boss,
+  round: number,
+  config: ModeConfig,
+  mode: DifficultyMode,
+  level: LearnerLevel,
+  bossPhase: BossPhase = "phase-1",
+  autonomyMode: "maths" | "words" | "mix" = "mix",
+  diagnostics?: RunDiagnostics
+): Question {
+  // Autonomy mode weighting: how likely to pick maths vs words
+  const isMathsRound =
+    autonomyMode === "maths" ? true :
+    autonomyMode === "words" ? false :
+    Math.random() < 0.5; // "mix" mode: 50/50
+
+  return isMathsRound ? createMathQuestion(boss, config, mode, level, bossPhase) : createSpellingQuestion(config, mode, level);
 }
 
 const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
@@ -396,6 +459,8 @@ const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
   "math-multiplication": { attempts: 0, correct: 0 }
 });
 
+const INITIAL_LIVES = 2;
+
 const initialStats = (): BattleStats => ({
   correctAnswers: 0,
   wrongAnswers: 0,
@@ -405,37 +470,46 @@ const initialStats = (): BattleStats => ({
   bossesDefeated: 0,
   streak: 0,
   maxStreak: 0,
-  skillProgress: createInitialSkillProgress()
-});
-const createInitialBattleState = (config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): BattleState => ({
-  bossIndex: 0,
-  bossHp: config.bossMaxHp,
-  playerHp: config.playerMaxHp,
-  round: 0,
-  question: createQuestion(BOSSES[0], 0, config, mode, level),
-  feedback: `${BOSSES[0].name} appears! ${BOSSES[0].taunts.intro}`,
-  phase: "quiz",
-  lastHit: null,
-  stats: initialStats()
+  skillProgress: createInitialSkillProgress(),
+  livesRemaining: INITIAL_LIVES
 });
 
-const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: LearnerLevel, playerHp: number, stats: BattleStats): BattleState => {
+const createInitialBattleState = (config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, autonomyMode: "maths" | "words" | "mix" = "mix"): BattleState => {
+  const bossPhase: BossPhase = "phase-1";
+  const baseState: BattleState = {
+    bossIndex: 0,
+    bossHp: config.bossMaxHp,
+    playerHp: config.playerMaxHp,
+    round: 0,
+    question: createQuestion(BOSSES[0], 0, config, mode, level, bossPhase, autonomyMode),
+    feedback: `${BOSSES[0].name} appears! ${BOSSES[0].taunts.intro}`,
+    phase: "quiz",
+    lastHit: null,
+    stats: initialStats(),
+    bossPhase
+  };
+  return baseState;
+};
+
+const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: LearnerLevel, playerHp: number, stats: BattleStats, autonomyMode: "maths" | "words" | "mix" = "mix"): BattleState => {
   const cfg = MODE_CONFIGS[mode];
   const boss = BOSSES[bossIndex];
+  const bossPhase: BossPhase = "phase-1";
   return {
     bossIndex,
     bossHp: cfg.bossMaxHp,
     playerHp,
     round: 0,
-    question: createQuestion(boss, 0, cfg, mode, level),
+    question: createQuestion(boss, 0, cfg, mode, level, bossPhase, autonomyMode),
     feedback: `${boss.name} jumps in! ${boss.taunts.intro}`,
     phase: "quiz",
     lastHit: null,
-    stats
+    stats,
+    bossPhase
   };
 };
 
-type Screen = "character-creation" | "title" | "battle" | "summary";
+type Screen = "onboarding" | "character-creation" | "title" | "battle" | "summary" | "settings" | "parental-controls";
 
 let audioCtx: AudioContext | null = null;
 const getAudioContext = () => {
@@ -618,7 +692,11 @@ const getInitialState = () => {
 export default function Page() {
   const [initial] = useState(() => getInitialState());
 
-  const [screen, setScreen] = useState<Screen>(initial.hasCharacter ? "title" : "character-creation");
+  const [screen, setScreen] = useState<Screen>(initial.hasCharacter ? "title" : "onboarding");
+  const [pinInput, setPinInput] = useState<string>("");
+  const [pinAttempts, setPinAttempts] = useState<number>(0);
+  const [parentalPinValid, setParentalPinValid] = useState<boolean>(false);
+  const PARENTAL_PIN = "1234"; // Can be configured in parent settings
   const [mode, setMode] = useState<DifficultyMode>(initial.mode);
   const [ageBand, setAgeBand] = useState<AgeBand>(initial.ageBand);
   const [level, setLevel] = useState<LearnerLevel>(initial.level);
@@ -627,6 +705,7 @@ export default function Page() {
   const [summaries, setSummaries] = useState<RunSummary[]>(initial.summaries);
   const [character, setCharacter] = useState<CharacterState | null>(initial.character);
   const [resumeRun, setResumeRun] = useState<{ mode: DifficultyMode; level: LearnerLevel; battle: BattleState; checkpoint: BattleState | null } | null>(initial.resumeRun);
+  const [powerLevels, setPowerLevels] = useState<PowerLevelMap>(() => loadPowerLevels(initial.mode));
   
   // Character creation state
   const [charNameInput, setCharNameInput] = useState<string>("");
@@ -649,6 +728,20 @@ export default function Page() {
   const handledTimeoutKeyRef = useRef<string | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(QUESTION_TIME_LIMIT);
   const [timeoutFlash, setTimeoutFlash] = useState<boolean>(false);
+  
+  /* Particle effects: Gold celebration (correct) or cool blue puff (wrong) */
+  const [particles, setParticles] = useState<Array<{
+    id: string;
+    type: "gold-burst" | "blue-puff";
+    x: number;
+    y: number;
+  }>>([]);
+
+  // Pedagogy layer: Spaced repetition, interleaving, hints, growth messaging
+  const [autonomyMode, setAutonomyMode] = useState<"maths" | "words" | "mix">("mix");
+  const [diagnostics, setDiagnostics] = useState<RunDiagnostics | null>(() => loadDiagnostics());
+  const [growthSummary, setGrowthSummary] = useState<GrowthSummary | null>(null);
+  const [currentHintText, setCurrentHintText] = useState<string | null>(null);
 
   const config = MODE_CONFIGS[mode];
   const currentBoss = BOSSES[battle.bossIndex];
@@ -832,7 +925,8 @@ export default function Page() {
       score: finalScore,
       accuracy: runAccuracy,
       bossesDefeated: finalBattle.stats.bossesDefeated,
-      maxStreak: finalBattle.stats.maxStreak
+      maxStreak: finalBattle.stats.maxStreak,
+      livesRemaining: finalBattle.stats.livesRemaining
     };
     const next = [entry, ...summaries].slice(0, 8);
     setSummaries(next);
@@ -840,8 +934,8 @@ export default function Page() {
   };
 
   const startGame = () => {
-    const freshBattle = createInitialBattleState(config, mode, level);
-    const freshCheckpoint = createInitialBattleState(config, mode, level);
+    const freshBattle = createInitialBattleState(config, mode, level, autonomyMode);
+    const freshCheckpoint = createInitialBattleState(config, mode, level, autonomyMode);
     setBattle(freshBattle);
     setCheckpoint(freshCheckpoint);
     setAttackMode("none");
@@ -850,11 +944,28 @@ export default function Page() {
     setPhaseBanner("Battle Start!");
     resetQuestionTimer();
     setResult(null);
+    
+    // Initialize pedagogy diagnostics for this run
+    const newDiagnostics: RunDiagnostics = {
+      sessionStartedAt: currentTimestamp(),
+      mode,
+      autonomyMode,
+      totalQuestionsAsked: 0,
+      recordsByFamily: new Map(),
+      hintTracker: initializeHintTracker(),
+      spacedRepetitionQueue: initializeSpacedRepetitionQueue(),
+      interleavingState: initializeInterleavingState()
+    };
+    setDiagnostics(newDiagnostics);
+    saveDiagnostics(newDiagnostics);
+    setCurrentHintText(null);
+    setGrowthSummary(null);
+    
     setScreen("battle");
     if (settings.persistProgress) {
       persistRunProgress(freshBattle, freshCheckpoint, mode, level);
     }
-    speak(`${config.label} mode ready for ${LEVEL_TUNING[level].label} learners. ${BOSSES[0].name} is entering the arena!`, "start");
+    speak(`${config.label} mode ready for ${LEVEL_TUNING[level].label} learners. ${autonomyMode === "maths" ? "Maths focus." : autonomyMode === "words" ? "Word skills focus." : "Mixed skills."} ${BOSSES[0].name} is entering the arena!`, "start");
   };
 
   const resumeAdventure = () => {
@@ -903,6 +1014,14 @@ export default function Page() {
 
     updateHighScore(finalScore, mode);
     appendSummary(runResult, mode, finalBattle, finalScore);
+
+    // Generate growth summary from pedagogical diagnostics
+    if (diagnostics) {
+      const summary = generateGrowthSummary(diagnostics);
+      setGrowthSummary(summary);
+    }
+    clearDiagnostics();
+    setCurrentHintText(null);
 
     if (settings.persistProgress) {
       clearProgress();
@@ -958,28 +1077,72 @@ export default function Page() {
 
     setAttackMode("boss");
     setDamagePop({ target: "player", amount: config.wrongDamage });
+    
+    /* Trigger cool blue puff feedback particles on wrong answer (gentle, kind feedback) */
+    const particleId = `blue-${Date.now()}-${Math.random()}`;
+    setParticles((prev) => [
+      ...prev,
+      { id: particleId, type: "blue-puff", x: window.innerWidth / 2, y: window.innerHeight / 2 }
+    ]);
+    setTimeout(() => {
+      setParticles((prev) => prev.filter((p) => p.id !== particleId));
+    }, 700);
+    
     if (isTimeout) {
       setQuestionTimeLeft(-1);
       setTimeoutFlash(true);
       setPhaseBanner("Time Up!");
     }
 
+    // Lives system: when HP hits 0, lose a life
     if (newPlayerHp <= 0) {
-      const defeatedBattle: BattleState = {
+      const newLives = Math.max(0, battle.stats.livesRemaining - 1);
+      
+      // If out of lives, game over
+      if (newLives <= 0) {
+        const defeatedBattle: BattleState = {
+          ...battle,
+          playerHp: 0,
+          feedback: feedbackData.message,
+          feedbackData,
+          lastHit: "player",
+          stats: {
+            ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
+            wrongAnswers: battle.stats.wrongAnswers + 1,
+            timeoutAnswers: battle.stats.timeoutAnswers + (isTimeout ? 1 : 0),
+            streak: 0,
+            livesRemaining: 0
+          }
+        };
+        setBattle(defeatedBattle);
+        finishRun("game-over", defeatedBattle);
+        return;
+      }
+      
+      // Still have lives: restore HP and continue
+      const restoredBattle: BattleState = {
         ...battle,
-        playerHp: 0,
-        feedback: feedbackData.message,
-        feedbackData,
+        playerHp: config.playerMaxHp, // Restore full HP when losing a life
+        round: battle.round + 1,
+        question: createQuestion(currentBoss, battle.round + 1, config, mode, level, battle.bossPhase, autonomyMode, diagnostics ?? undefined),
+        feedback: `Lost a life! ${newLives === 1 ? "One life left!" : `${newLives} lives left`}. Keep going, you've got this!`,
+        feedbackData: undefined,
         lastHit: "player",
         stats: {
           ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
           wrongAnswers: battle.stats.wrongAnswers + 1,
           timeoutAnswers: battle.stats.timeoutAnswers + (isTimeout ? 1 : 0),
-          streak: 0
+          streak: 0,
+          livesRemaining: newLives
         }
       };
-      setBattle(defeatedBattle);
-      finishRun("game-over", defeatedBattle);
+      resetQuestionTimer();
+      setBattle(restoredBattle);
+      setPhaseBanner(`❤️ ${newLives} Live${newLives === 1 ? "" : "s"} Left`);
+      if (settings.persistProgress) {
+        persistRunProgress(restoredBattle, checkpoint, mode, level);
+      }
+      speak(`You lost a life. ${newLives} remaining. Don't give up!`, "wrong");
       return;
     }
 
@@ -988,7 +1151,7 @@ export default function Page() {
       ...battle,
       playerHp: newPlayerHp,
       round: nextRound,
-      question: createQuestion(currentBoss, nextRound, config, mode, level),
+      question: createQuestion(currentBoss, nextRound, config, mode, level, battle.bossPhase, autonomyMode, diagnostics ?? undefined),
       feedback: feedbackData.message,
       feedbackData,
       lastHit: "player",
@@ -996,7 +1159,8 @@ export default function Page() {
         ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
         wrongAnswers: battle.stats.wrongAnswers + 1,
         timeoutAnswers: battle.stats.timeoutAnswers + (isTimeout ? 1 : 0),
-        streak: 0
+        streak: 0,
+        livesRemaining: battle.stats.livesRemaining
       }
     };
     resetQuestionTimer();
@@ -1016,11 +1180,75 @@ export default function Page() {
     const nextRound = battle.round + 1;
     setTypedAnswer("");
 
+    // Record question attempt in pedagogy diagnostics
+    if (diagnostics) {
+      const updatedDiagnostics = {
+        ...diagnostics,
+        totalQuestionsAsked: diagnostics.totalQuestionsAsked + 1
+      };
+      recordQuestionAttempt(updatedDiagnostics, battle.question.skillArea as ConceptFamily, isCorrect);
+      setDiagnostics(updatedDiagnostics);
+      saveDiagnostics(updatedDiagnostics);
+
+      // Check if hint should be shown
+      if (!isCorrect && shouldShowHint(updatedDiagnostics, battle.question.skillArea as ConceptFamily)) {
+        const hints: Record<string, string> = {
+          "spelling-missing-letter": "💡 Tip: Sound out the word slowly. What letter fits?",
+          "spelling-beginning-sound": "💡 Tip: Listen to the first sound in your head.",
+          "spelling-word-ending": "💡 Tip: Think of other words with the same ending.",
+          "spelling-letter-count": "💡 Tip: Count each letter with your finger.",
+          "spelling-vowel-sound": "💡 Tip: Remember the vowels: A, E, I, O, U.",
+          "spelling-unscramble": "💡 Tip: Look for word patterns or common endings.",
+          "math-add-subtract": "💡 Tip: Use your fingers or draw circles to count.",
+          "math-missing-number": "💡 Tip: Count forward from the first number.",
+          "math-two-step": "💡 Tip: Do the first step, then use that answer for the second.",
+          "math-multiplication": "💡 Tip: Think of groups. 3 groups of 4 means 3 × 4."
+        };
+        const hintMsg = hints[battle.question.skillArea] || "💡 Take a breath and try again!";
+        setCurrentHintText(hintMsg);
+      } else {
+        setCurrentHintText(null);
+      }
+    }
+
     if (isCorrect) {
+      // Update power levels for this question family
+      const skillFamilyId = battle.question.skillArea;
+      const updatedPowerLevels = {
+        ...powerLevels,
+        [skillFamilyId]: updatePowerLevel(skillFamilyId, powerLevels[skillFamilyId], true)
+      };
+      setPowerLevels(updatedPowerLevels);
+      savePowerLevels(mode, updatedPowerLevels);
+
       const newBossHp = Math.max(0, battle.bossHp - config.correctDamage);
+      const nextPhase = getBossPhase(newBossHp, config.bossMaxHp);
+      const phaseChanged = nextPhase !== battle.bossPhase;
+      
       setAttackMode("hero");
       setDamagePop({ target: "boss", amount: config.correctDamage });
-      setPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
+      
+      /* Trigger gold burst celebration particles on correct answer */
+      const particleId = `gold-${Date.now()}-${Math.random()}`;
+      setParticles((prev) => [
+        ...prev,
+        { id: particleId, type: "gold-burst", x: window.innerWidth / 2, y: window.innerHeight / 2 }
+      ]);
+      setTimeout(() => {
+        setParticles((prev) => prev.filter((p) => p.id !== particleId));
+      }, 800);
+      
+      // Phase transition feedback
+      if (phaseChanged) {
+        const phaseMessages = {
+          "phase-2": "🔥 You're getting stronger! Boss enters Phase 2!",
+          "phase-3": "⚡ Incredible focus! Boss enters Phase 3 - final stand!",
+          "critical": "💥 One last push! Boss is nearly defeated!"
+        };
+        setPhaseBanner(phaseMessages[nextPhase]);
+      } else {
+        setPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
+      }
 
       if (newBossHp <= 0) {
         const defeatedBattle: BattleState = {
@@ -1030,6 +1258,7 @@ export default function Page() {
           feedback: `${currentBoss.taunts.defeated} ${battle.question.typeLabel === "Spelling" ? "You used awesome word power!" : "Your maths power-up was perfect!"}`,
           phase: "boss-defeated",
           lastHit: "boss",
+          bossPhase: nextPhase,
           stats: {
             ...bumpSkillProgress(battle.stats, battle.question.skillArea, true),
             correctAnswers: battle.stats.correctAnswers + 1,
@@ -1037,7 +1266,8 @@ export default function Page() {
             mathsCorrect: battle.stats.mathsCorrect + (battle.question.typeLabel === "Maths" ? 1 : 0),
             bossesDefeated: battle.stats.bossesDefeated + 1,
             streak: battle.stats.streak + 1,
-            maxStreak: Math.max(battle.stats.maxStreak, battle.stats.streak + 1)
+            maxStreak: Math.max(battle.stats.maxStreak, battle.stats.streak + 1),
+            livesRemaining: battle.stats.livesRemaining
           }
         };
         setBattle(defeatedBattle);
@@ -1053,16 +1283,19 @@ export default function Page() {
         ...battle,
         bossHp: newBossHp,
         round: nextRound,
-        question: createQuestion(currentBoss, nextRound, config, mode, level),
+        question: createQuestion(currentBoss, nextRound, config, mode, level, nextPhase, autonomyMode, diagnostics ?? undefined),
         feedback: buildCorrectFeedback(currentBoss, battle.question, newBossHp, config),
         lastHit: "boss",
+        bossPhase: nextPhase,
+        phaseSwitchNotification: phaseChanged ? `Entering ${nextPhase}` : undefined,
         stats: {
           ...bumpSkillProgress(battle.stats, battle.question.skillArea, true),
           correctAnswers: battle.stats.correctAnswers + 1,
           spellingCorrect: battle.stats.spellingCorrect + (battle.question.typeLabel === "Spelling" ? 1 : 0),
           mathsCorrect: battle.stats.mathsCorrect + (battle.question.typeLabel === "Maths" ? 1 : 0),
           streak: battle.stats.streak + 1,
-          maxStreak: Math.max(battle.stats.maxStreak, battle.stats.streak + 1)
+          maxStreak: Math.max(battle.stats.maxStreak, battle.stats.streak + 1),
+          livesRemaining: battle.stats.livesRemaining
         }
       };
       resetQuestionTimer();
@@ -1070,9 +1303,18 @@ export default function Page() {
       if (settings.persistProgress) {
         persistRunProgress(nextBattle, checkpoint, mode, level);
       }
-      speak("Correct answer. Spark strike launched!", "correct");
+      speak(phaseChanged ? `Phase change! ${nextPhase === "phase-2" ? "Getting tougher!" : "Final stretch!"}` : "Correct answer. Spark strike launched!", "correct");
       return;
     }
+
+    // Wrong answer: update power level with -1
+    const skillFamilyId = battle.question.skillArea;
+    const updatedPowerLevels = {
+      ...powerLevels,
+      [skillFamilyId]: updatePowerLevel(skillFamilyId, powerLevels[skillFamilyId], false)
+    };
+    setPowerLevels(updatedPowerLevels);
+    savePowerLevels(mode, updatedPowerLevels);
 
     resolveWrongAnswer(false);
   };
@@ -1108,6 +1350,89 @@ export default function Page() {
         <strong>Coach Comet says:</strong>
         <p>{voiceLine}</p>
       </section>
+
+      {screen === "onboarding" && (
+        <section className="card onboarding-section center-stack">
+          <h2>How to Play (Visual Guide)</h2>
+          <div className="onboarding-carousel">
+            {/* Screen 1: Meet the Hero */}
+            <div className="onboarding-screen active">
+              <div className="onboarding-visual" aria-hidden>
+                <div className="onboarding-emoji" style={{ fontSize: "6rem" }}>🧙‍♂️</div>
+              </div>
+              <h3>You are the Hero!</h3>
+              <p>Create your character and step into the arena. Pick your outfit and gear up for battle.</p>
+              <div className="onboarding-cues">
+                <span>👖 Customize clothes</span>
+                <span>🎨 Choose colors</span>
+                <span>🏆 Battle starts</span>
+              </div>
+            </div>
+
+            {/* Screen 2: Answer Questions = Deal Damage */}
+            <div className="onboarding-screen">
+              <div className="onboarding-visual" aria-hidden>
+                <div style={{ display: "flex", gap: "2rem", justifyContent: "center", alignItems: "center", margin: "1rem 0" }}>
+                  <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>❓</div>
+                  <div style={{ fontSize: "2rem" }}>⚡</div>
+                  <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>👹</div>
+                </div>
+              </div>
+              <h3>Answer Wins Battles</h3>
+              <p>The boss asks spelling and maths questions. Get it right = you attack! Get it wrong = boss hits back.</p>
+              <div className="onboarding-cues">
+                <span>✅ Correct → Damage boss</span>
+                <span>❌ Wrong → Lose HP</span>
+              </div>
+            </div>
+
+            {/* Screen 3: Boss Phases */}
+            <div className="onboarding-screen">
+              <div className="onboarding-visual" aria-hidden>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", margin: "1rem 0" }}>
+                  <div>
+                    <div style={{ fontSize: "3rem", marginBottom: "0.5rem" }}>1️⃣</div>
+                    <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>Easy</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "3rem", marginBottom: "0.5rem" }}>⚡</div>
+                    <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>Hard</div>
+                  </div>
+                </div>
+              </div>
+              <h3>Boss Gets Tougher</h3>
+              <p>As the boss loses health, questions get harder and faster. Stay focused and you'll win!</p>
+              <div className="onboarding-cues">
+                <span>📊 3 phases + critical</span>
+                <span>🚀 Difficulty scales up</span>
+              </div>
+            </div>
+
+            {/* Screen 4: Win = Next Boss */}
+            <div className="onboarding-screen">
+              <div className="onboarding-visual" aria-hidden>
+                <div style={{ display: "flex", gap: "1rem", justifyContent: "center", margin: "1rem 0", fontSize: "4rem" }}>
+                  <span>👹</span>
+                  <span style={{ fontSize: "2rem", opacity: 0.6 }}>→</span>
+                  <span>🐉</span>
+                  <span style={{ fontSize: "2rem", opacity: 0.6 }}>→</span>
+                  <span>🏆</span>
+                </div>
+              </div>
+              <h3>Defeat All Bosses</h3>
+              <p>Beat one boss and face the next. Defeat all to unlock victory! Your power grows with every question you answer right.</p>
+              <div className="onboarding-cues">
+                <span>🏆 2 bosses total</span>
+                <span>⭐ Earn power levels</span>
+              </div>
+            </div>
+          </div>
+
+          <button className="big-btn" onClick={() => setScreen("character-creation")}>
+            I'm Ready to Play! 🎮
+          </button>
+        </section>
+      )}
 
       {screen === "character-creation" && (
         <section className="card center-stack character-creation-card">
@@ -1207,6 +1532,205 @@ export default function Page() {
         </section>
       )}
 
+      {screen === "parental-controls" && (
+        <section className="card center-stack parental-controls-card">
+          <h2>🔒 Parental Controls</h2>
+          <p>Enter PIN to unlock parent settings</p>
+
+          {!parentalPinValid ? (
+            <div className="pin-entry-form">
+              <div className="pin-display">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className={`pin-dot ${i < pinInput.length ? "filled" : ""}`} />
+                ))}
+              </div>
+              <div className="pin-pad">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    className="pin-btn"
+                    onClick={() => {
+                      if (pinInput.length < 4) {
+                        setPinInput(pinInput + num);
+                      }
+                    }}
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  className="pin-btn pin-delete"
+                  onClick={() => setPinInput(pinInput.slice(0, -1))}
+                >
+                  ← Del
+                </button>
+              </div>
+
+              {pinAttempts > 0 && pinInput.length === 0 && (
+                <p style={{ color: "#ff6b6b", fontWeight: 700 }}>
+                  ❌ Wrong PIN. Attempts: {pinAttempts}/3
+                </p>
+              )}
+
+              {pinInput.length === 4 && (
+                <div>
+                  {pinInput === PARENTAL_PIN ? (
+                    <div>
+                      <p style={{ color: "#51cf66", fontWeight: 700 }}>✅ PIN Correct!</p>
+                      <button
+                        className="big-btn"
+                        onClick={() => {
+                          setParentalPinValid(true);
+                          setScreen("settings");
+                        }}
+                      >
+                        Access Parent Settings
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ color: "#ff6b6b", fontWeight: 700 }}>❌ Wrong PIN. Try again.</p>
+                      <button
+                        className="ghost-btn"
+                        onClick={() => {
+                          setPinInput("");
+                          setPinAttempts(pinAttempts + 1);
+                          if (pinAttempts + 1 >= 3) {
+                            setTimeout(() => {
+                              setScreen("title");
+                              setPinInput("");
+                              setPinAttempts(0);
+                            }, 2000);
+                          }
+                        }}
+                      >
+                        Clear & Retry
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <p>✅ PIN verified. You can now modify parent settings.</p>
+              <button className="big-btn" onClick={() => setScreen("settings")}>
+                Go to Settings
+              </button>
+            </div>
+          )}
+
+          <button className="ghost-btn" onClick={() => {
+            setScreen("title");
+            setPinInput("");
+            setPinAttempts(0);
+            setParentalPinValid(false);
+          }}>
+            Back
+          </button>
+        </section>
+      )}
+
+      {screen === "settings" && (
+        <section className="card center-stack settings-full-card">
+          <h2>⚙️ Settings</h2>
+          
+          <div className="settings-sections">
+            {/* Sound Settings */}
+            <div className="settings-section">
+              <h3>🔊 Sound</h3>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Master Volume
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Boss Dialogue
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Feedback Sounds
+              </label>
+            </div>
+
+            {/* Gameplay Settings */}
+            <div className="settings-section">
+              <h3>🎮 Gameplay</h3>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={settings.persistProgress} onChange={(e) => updateSetting("persistProgress", e.target.checked)} />
+                Save Progress (Resume Games)
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={settings.persistDifficulty} onChange={(e) => updateSetting("persistDifficulty", e.target.checked)} />
+                Remember Difficulty
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Show Hints When Wrong
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Timer Enabled
+              </label>
+            </div>
+
+            {/* Appearance Settings */}
+            <div className="settings-section">
+              <h3>🎨 Appearance</h3>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                High Contrast Mode (Accessibility)
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Colorblind-Friendly Mode
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={true} onChange={() => {}} />
+                Large Text
+              </label>
+            </div>
+
+            {/* Parental / Safety Settings (Locked by PIN) */}
+            <div className="settings-section parental-section">
+              <h3>👨‍👩‍👧‍👦 Parental Controls</h3>
+              <p style={{ fontSize: "0.95rem", opacity: 0.9, marginBottom: "1rem" }}>
+                Parent-only settings to manage playtime and content.
+              </p>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={settings.persistHighScore} onChange={(e) => updateSetting("persistHighScore", e.target.checked)} />
+                Track High Scores
+              </label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={settings.persistSummaries} onChange={(e) => updateSetting("persistSummaries", e.target.checked)} />
+                Save Run History
+              </label>
+              <div className="setting-input-group">
+                <label>Daily Playtime Limit (minutes)</label>
+                <input type="number" className="settings-input" defaultValue="60" min="10" max="180" />
+              </div>
+              <div className="setting-input-group">
+                <label>Session Duration (minutes)</label>
+                <input type="number" className="settings-input" defaultValue="20" min="5" max="60" />
+              </div>
+              <button
+                className="ghost-btn"
+                onClick={() => {
+                  setParentalPinValid(false);
+                  setPinInput("");
+                }}
+              >
+                Lock Parental Controls
+              </button>
+            </div>
+          </div>
+
+          <button className="big-btn" onClick={() => setScreen("title")}>
+            Back to Title
+          </button>
+        </section>
+      )}
+
       {screen === "title" && (
         <section className="card center-stack">
           {character && (
@@ -1266,6 +1790,24 @@ export default function Page() {
                   <option value="expert">Expert</option>
                 </select>
               </label>
+              <label>
+                Question focus (autonomy)
+                <select
+                  value={autonomyMode}
+                  onChange={(e) => {
+                    const nextMode = e.target.value as "maths" | "words" | "mix";
+                    setAutonomyMode(nextMode);
+                    const msg = nextMode === "maths" ? "Maths focus: you'll see more numbers and calculations." : 
+                               nextMode === "words" ? "Word focus: you'll see more spelling and language." : 
+                               "Mix mode: balanced mix of maths and word skills.";
+                    speak(msg, "start");
+                  }}
+                >
+                  <option value="mix">Mix (50/50)</option>
+                  <option value="maths">Maths focus</option>
+                  <option value="words">Words focus</option>
+                </select>
+              </label>
             </div>
             <small>{LEVEL_TUNING[level].blurb}</small>
           </div>
@@ -1321,17 +1863,60 @@ export default function Page() {
             ))}
           </div>
           <button className="big-btn" onClick={startGame}>Start Adventure</button>
+          <button className="ghost-btn" onClick={() => setScreen("parental-controls")}>⚙️ Settings</button>
         </section>
       )}
 
       {screen === "battle" && (
         <section className={`card battle-card ${currentBoss.colorClass} ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
+          
+          <div className="battle-top-controls" role="toolbar" aria-label="Battle controls">
+            <button className="pause-btn" onClick={() => setScreen("title")} title="Pause and return to title">
+              ⏸️ Pause
+            </button>
+          </div>
           <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
 
           <div className="hud-row">
-            <div className="hud-box"><strong>Hero HP {battle.playerHp}/{config.playerMaxHp}</strong><div className="bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div></div>
-            <div className="hud-box"><strong>{currentBoss.name} HP {battle.bossHp}/{config.bossMaxHp}</strong><div className="bar enemy"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div></div>
+            <div className="hud-box">
+              <strong>Hero HP {battle.playerHp}/{config.playerMaxHp}</strong>
+              <div className="bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
+              <div className="lives-indicator" aria-label={`Lives remaining: ${battle.stats.livesRemaining}`}>
+                {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
+                  <span key={i} className={`life-heart ${i < battle.stats.livesRemaining ? "active" : "empty"}`}>
+                    {i < battle.stats.livesRemaining ? "❤️" : "🖤"}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="hud-box">
+              <strong>{currentBoss.name} HP {battle.bossHp}/{config.bossMaxHp}</strong>
+              <div className="bar enemy"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
+              <div className="phase-indicator" aria-label={`Boss phase: ${battle.bossPhase}`}>
+                Phase: <strong>{battle.bossPhase === "phase-1" ? "1️⃣" : battle.bossPhase === "phase-2" ? "2️⃣" : battle.bossPhase === "phase-3" ? "3️⃣" : "⚡"}</strong>
+              </div>
+            </div>
+          </div>
+          
+          {/* Power Level Display */}
+          <div className="power-level-hud">
+            <div className="power-level-row">
+              <span className="skill-label">{battle.question.skillArea.replace(/-/g, " ")}</span>
+              <div className="power-level-bar">
+                {powerLevels[battle.question.skillArea] && (
+                  <>
+                    <div className="power-fill" style={{ width: `${powerLevels[battle.question.skillArea].level}%` }} />
+                    <span className="power-stage">{getPowerLevelStage(powerLevels[battle.question.skillArea].level)}</span>
+                  </>
+                ) || (
+                  <>
+                    <div className="power-fill" style={{ width: "0%" }} />
+                    <span className="power-stage">novice</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="battle-stage">
@@ -1372,13 +1957,24 @@ export default function Page() {
             </div>
 
             <div className={`boss-sprite ${getSpriteAnimationClass("boss", attackMode, attackMode === "hero")}`}>
-              <BossVisuals
-                bossId={currentBoss.id}
+              <KeeperCharacter
+                phase={battle.bossPhase}
                 animated={attackMode === "boss"}
                 size="large"
               />
-              <div className="sprite-label">{currentBoss.name}</div>
+              <div className="sprite-label">The Keeper of Patience</div>
               {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
+            </div>
+            
+            {/* Particle effects container */}
+            <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 100 }}>
+              {particles.map((particle) =>
+                particle.type === "gold-burst" ? (
+                  <GoldBurstParticle key={particle.id} x={particle.x} y={particle.y} count={8} />
+                ) : (
+                  <BluePuffParticle key={particle.id} x={particle.x} y={particle.y} count={6} />
+                )
+              )}
             </div>
 
             <div className="arena-container right">
@@ -1388,8 +1984,8 @@ export default function Page() {
 
           <div className="boss-stage">
             <div>
-              <h2>{currentBoss.name}</h2>
-              <p>{currentBoss.subtitle}</p>
+              <h2>The Keeper of Patience</h2>
+              <p>Guardian of the Tome of Growing Knowledge. Test your wisdom.</p>
               {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
                 <WrongAnswerFeedback feedback={battle.feedbackData} />
               ) : (
@@ -1413,6 +2009,19 @@ export default function Page() {
                 <div className="timer-track"><span style={{ width: `${timerPercent}%` }} /></div>
               </div>
               <h3>{battle.question.prompt}</h3>
+              {currentHintText && (
+                <div style={{ 
+                  backgroundColor: "#f0f9ff", 
+                  border: "2px solid #3498db", 
+                  borderRadius: "8px", 
+                  padding: "1em", 
+                  marginBottom: "1em",
+                  color: "#2c3e50",
+                  fontWeight: 500
+                }}>
+                  {currentHintText}
+                </div>
+              )}
               {battle.question.inputMode === "choice" ? (
                 <>
                   <p className="question-hint" aria-hidden>Tap one big answer button below:</p>
@@ -1477,6 +2086,52 @@ export default function Page() {
             <div><strong>Best streak</strong><span>{battle.stats.maxStreak}</span></div>
           </div>
           <p className="level-badge">{learningLevel}</p>
+
+          {/* Growth Summary: Pedagogy Layer - Show accuracy by topic and actionable insights */}
+          {growthSummary && (
+            <div className="scorecard-panel full-width pedagogy-growth">
+              <strong>🌱 Growth Summary</strong>
+              <p style={{ fontSize: "1.1em", fontWeight: 500, marginTop: "0.5em" }}>{growthSummary.actionableInsight}</p>
+              
+              {growthSummary.masteringFamilies.length > 0 && (
+                <div style={{ marginTop: "1em" }}>
+                  <strong style={{ color: "#2ecc71" }}>✨ You're mastering:</strong>
+                  <ul style={{ marginLeft: "1em" }}>
+                    {growthSummary.masteringFamilies.map((family) => {
+                      const stats = growthSummary.accuracyByFamily[family];
+                      return (
+                        <li key={family}>
+                          {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              
+              {growthSummary.strugglingFamilies.length > 0 && (
+                <div style={{ marginTop: "1em" }}>
+                  <strong style={{ color: "#e67e22" }}>🎯 Focus areas (let's improve these):</strong>
+                  <ul style={{ marginLeft: "1em" }}>
+                    {growthSummary.strugglingFamilies.map((family) => {
+                      const stats = growthSummary.accuracyByFamily[family];
+                      return (
+                        <li key={family} style={{ color: "#e67e22" }}>
+                          {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              
+              {growthSummary.hintsShown > 0 && (
+                <p style={{ marginTop: "1em", fontSize: "0.95em", color: "#7f8c8d" }}>
+                  💡 {growthSummary.hintsShown} hint{growthSummary.hintsShown === 1 ? "" : "s"} appeared to help you learn.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="scorecard-panel full-width">
             <strong>Parent / teacher interpretation</strong>

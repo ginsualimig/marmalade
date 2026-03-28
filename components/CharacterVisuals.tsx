@@ -1,4 +1,5 @@
 import React from "react";
+export { KeeperCharacter, GoldBurstParticle, BluePuffParticle } from "./KeeperCharacter";
 
 export interface OutfitState {
   hat?: string; // "wizard", "crown", "beanie", "bow"
