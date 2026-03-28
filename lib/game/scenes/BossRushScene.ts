@@ -63,6 +63,7 @@ const ATTACK_CONFIG: Record<AttackStyle, { damage: number; width: number; height
 
 const PLAYER_HP_MAX = 100;
 const PLAYER_MP_MAX = 120;
+const PLAYER_DAMAGE_IFRAME_MS = 320;
 
 
 export type TouchCommand = {
@@ -149,6 +150,9 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private touchState = { left: false, right: false };
   private isTransitioning = false;
+  private lastPlayerDamageAt = -9999;
+  private bossDefeatHandled = false;
+  private gameOverHandled = false;
   private managedEvents: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
@@ -157,6 +161,9 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   create() {
     this.isTransitioning = false;
+    this.bossDefeatHandled = false;
+    this.gameOverHandled = false;
+    this.lastPlayerDamageAt = -9999;
     globalGameState.isGameOver = false;
 
     if (globalGameState.bossIndex >= BOSS_DEFINITIONS.length) {
@@ -652,6 +659,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
 
   private applyComboDamage(baseDamage: number) {
+    if (this.isTransitioning || this.bossDefeatHandled) return;
     const now = this.time.now;
     if (now - this.lastHitAt < 1800) {
       this.comboCount += 1;
@@ -686,6 +694,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private handleBossDefeated() {
+    if (this.bossDefeatHandled || this.isTransitioning) return;
+    this.bossDefeatHandled = true;
     this.isTransitioning = true;
     playAudioCue("reward");
     this.spawnSparkBurst(this.boss.x, this.boss.y - 20, 0xfff18f);
@@ -699,7 +709,10 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.bossTimer?.remove();
     this.bossPrepEvent?.remove(false);
     this.clearBossPrepSignal();
-    this.time.delayedCall(420, () => this.scene.start("CutsceneScene", { bossName: this.currentBoss?.name }));
+    this.time.delayedCall(420, () => {
+      if (!this.scene.isActive()) return;
+      this.scene.start("CutsceneScene", { bossName: this.currentBoss?.name });
+    });
   }
 
   private startBossLoop() {
@@ -714,7 +727,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private queueBossAction() {
-    if (!this.currentBoss) return;
+    if (!this.currentBoss || this.isTransitioning) return;
     const warningMessage =
       this.currentBoss.name === "Charlotte"
         ? "Charlotte is readying another toy!"
@@ -732,7 +745,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private performBossAction() {
-    if (!this.currentBoss) return;
+    if (!this.currentBoss || this.isTransitioning) return;
     const bossName = this.currentBoss.name;
     if (bossName === "Charlotte") {
       this.launchCharlotteMove();
@@ -776,6 +789,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     body.setImmovable(true);
     body.allowGravity = false;
     this.hazardGroup?.add(slam);
+    this.setHazardExpiry(slam, 2400);
     this.tweens.add({
       targets: slam,
       width: 280,
@@ -791,7 +805,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private launchGeorgeMove() {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
-      this.launchGeorgeSpin(6);
+      this.launchGeorgeSpin(5);
       this.bossPhaseText.setText("George spins wildly!");
     } else if (option === 1) {
       this.launchProjectile("diagonal", 160, 0x15ffa0);
@@ -803,7 +817,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
     if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
       this.activateShieldPhase("Meltdown! Intense tantrum spin");
-      this.launchGeorgeSpin(8);
+      this.launchGeorgeSpin(6);
     }
   }
 
@@ -811,7 +825,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.bossPhaseText.setText("Spin tantrum!");
     const color = 0x4dd0ff;
     for (let i = 0; i < count; i++) {
-      this.scheduleManagedCall(i * 120, () => {
+      this.scheduleManagedCall(i * 140, () => {
         if (!this.scene.isActive() || this.isTransitioning) return;
         const angle = (i / count) * Math.PI * 2;
         const projectile = this.add.circle(this.boss.x, this.boss.y, 10, color, 0.9);
@@ -821,6 +835,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
         body.setAllowGravity(false);
         body.setCollideWorldBounds(false);
         this.hazardGroup?.add(projectile);
+        this.setHazardExpiry(projectile, 1900);
         this.trimHazardCount();
         this.tweens.add({
           targets: projectile,
@@ -839,6 +854,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const wave = this.add.rectangle(this.player.x, 600, 260, 16, 0x15ffa0, 0.5);
     this.physics.add.existing(wave, true);
     this.hazardGroup?.add(wave);
+    this.setHazardExpiry(wave, 2800);
     this.trimHazardCount();
     this.tweens.add({
       targets: wave,
@@ -872,6 +888,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     body.setBounce(type === "diagonal" ? 0.1 : 0.5);
     body.setGravityY(type === "diagonal" ? 180 : 450);
     this.hazardGroup?.add(projectile);
+    this.setHazardExpiry(projectile, 4600);
     this.trimHazardCount();
   }
 
@@ -881,6 +898,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const puddle = this.add.rectangle(this.player.x, 580, width, 16, 0x96f7ff, 0.5);
     this.physics.add.existing(puddle, true);
     this.hazardGroup?.add(puddle);
+    this.setHazardExpiry(puddle, 4300);
     this.trimHazardCount();
     this.scheduleManagedCall(4200, () => {
       puddle.destroy();
@@ -1310,6 +1328,10 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     return event;
   }
 
+  private setHazardExpiry(hazard: Phaser.GameObjects.GameObject, ttlMs: number) {
+    hazard.setData("expiresAt", this.time.now + ttlMs);
+  }
+
   private trimHazardCount(max = 42) {
     const hazards = this.hazardGroup?.getChildren() ?? [];
     if (hazards.length <= max) return;
@@ -1338,7 +1360,12 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.time.delayedCall(1000, () => flash.destroy());
   }
 
+  private canTakeHazardDamage() {
+    return this.time.now - this.lastPlayerDamageAt >= PLAYER_DAMAGE_IFRAME_MS;
+  }
+
   private applyPlayerDamage(amount: number) {
+    if (this.isTransitioning) return;
     this.playerHP = Math.max(0, this.playerHP - amount);
     if (this.player) {
       playAudioCue("damage");
@@ -1351,6 +1378,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private endGameOver() {
+    if (this.gameOverHandled || this.isTransitioning) return;
+    this.gameOverHandled = true;
     this.isTransitioning = true;
     globalGameState.score = this.score;
     globalGameState.playerHP = this.playerHP;
@@ -1363,6 +1392,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private handleHazardCollision(playerObj: ArcadePhysicsObject, hazardObj: ArcadePhysicsObject) {
     hazardObj.destroy();
+    if (!this.canTakeHazardDamage()) return;
+    this.lastPlayerDamageAt = this.time.now;
     this.applyPlayerDamage(8);
   }
 
@@ -1386,6 +1417,18 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
         const bubble = textChild.getData("bubble") as Phaser.GameObjects.Arc | undefined;
         bubble?.destroy();
         child.destroy();
+      }
+    });
+    this.hazardGroup?.getChildren().forEach((child) => {
+      const hazard = child as Phaser.GameObjects.GameObject & { x?: number; y?: number; alpha?: number; getData: (key: string) => unknown };
+      const x = hazard.x ?? 0;
+      const y = hazard.y ?? 0;
+      const expiresAt = Number(hazard.getData("expiresAt") ?? 0);
+      const expired = expiresAt > 0 && this.time.now >= expiresAt;
+      const offscreen = x < -120 || x > 920 || y < -140 || y > 700;
+      const faded = (hazard.alpha ?? 1) <= 0.02;
+      if (expired || offscreen || faded) {
+        hazard.destroy();
       }
     });
   }
