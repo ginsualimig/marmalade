@@ -517,7 +517,7 @@ export const generateGrowthSummary = (diagnostics: RunDiagnostics): GrowthSummar
     "math-multiplication": { correct: 0, total: 0, percentage: 0 }
   };
   let hintsShown = 0;
-  let interleavingInjections = 0;
+  const interleavingInjections = 0;
   
   // Tally accuracy per family
   diagnostics.recordsByFamily.forEach((records, familyId) => {
@@ -533,7 +533,7 @@ export const generateGrowthSummary = (diagnostics: RunDiagnostics): GrowthSummar
   });
   
   // Count interleaving injections (rough estimate: times consecutive count reset)
-  let injectionCount = 0;
+  const injectionCount = 0;
   // This would require more detailed tracking; for now, estimate based on diversity
   
   // Identify struggling and mastering families
@@ -587,17 +587,22 @@ export const saveDiagnostics = (diagnostics: RunDiagnostics) => {
 
 export const loadDiagnostics = (): RunDiagnostics | null => {
   if (!isBrowser()) return null;
-  const raw = safeParse<any>(window.localStorage.getItem(PEDAGOGY_DIAGNOSTICS_KEY), null);
+  const raw = safeParse<Record<string, unknown> | null>(window.localStorage.getItem(PEDAGOGY_DIAGNOSTICS_KEY), null);
   if (!raw) return null;
+
+  const recordsByFamily = raw.recordsByFamily && typeof raw.recordsByFamily === "object"
+    ? new Map(Object.entries(raw.recordsByFamily as Record<string, QuestionAnswerRecord[]>)) as Map<ConceptFamily, QuestionAnswerRecord[]>
+    : new Map<ConceptFamily, QuestionAnswerRecord[]>();
+
   return {
-    sessionStartedAt: raw.sessionStartedAt,
-    mode: raw.mode,
-    autonomyMode: raw.autonomyMode,
-    totalQuestionsAsked: raw.totalQuestionsAsked,
-    recordsByFamily: new Map(Object.entries(raw.recordsByFamily || {})) as Map<ConceptFamily, QuestionAnswerRecord[]>,
-    hintTracker: raw.hintTracker || {},
-    spacedRepetitionQueue: raw.spacedRepetitionQueue || { slots: [], currentTurn: 0 },
-    interleavingState: raw.interleavingState || { consecutiveFromFamily: null, consecutiveCount: 0, lastFamilyAsked: null }
+    sessionStartedAt: typeof raw.sessionStartedAt === "number" ? raw.sessionStartedAt : 0,
+    mode: raw.mode === "sprout" || raw.mode === "spark" || raw.mode === "comet" ? raw.mode : "spark",
+    autonomyMode: raw.autonomyMode === "maths" || raw.autonomyMode === "words" || raw.autonomyMode === "mix" ? raw.autonomyMode : "mix",
+    totalQuestionsAsked: typeof raw.totalQuestionsAsked === "number" ? raw.totalQuestionsAsked : 0,
+    recordsByFamily,
+    hintTracker: (raw.hintTracker as RunDiagnostics["hintTracker"]) || initializeHintTracker(),
+    spacedRepetitionQueue: (raw.spacedRepetitionQueue as RunDiagnostics["spacedRepetitionQueue"]) || initializeSpacedRepetitionQueue(),
+    interleavingState: (raw.interleavingState as RunDiagnostics["interleavingState"]) || initializeInterleavingState()
   };
 };
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 
 interface KeeperCharacterProps {
   phase: "phase-1" | "phase-2" | "phase-3" | "critical"; // Tied to boss HP: 75%-100%, 50%-74%, 25%-49%, <25%
@@ -136,25 +136,28 @@ export function GoldBurstParticle({
   y: number;
   count?: number;
 }) {
-  const particles = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * Math.PI * 2;
-    const distance = 60 + Math.random() * 40;
-    const tx = Math.cos(angle) * distance;
-    const ty = Math.sin(angle) * distance;
+  const particles = useMemo(
+    () => Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * Math.PI * 2;
+      const distance = 60 + ((i * 17) % 40);
+      const tx = Math.cos(angle) * distance;
+      const ty = Math.sin(angle) * distance;
 
-    return (
-      <div
-        key={i}
-        className="particle-gold-burst"
-        style={{
-          left: x,
-          top: y,
-          "--tx": `${tx}px`,
-          "--ty": `${ty}px`
-        } as React.CSSProperties}
-      />
-    );
-  });
+      return (
+        <div
+          key={i}
+          className="particle-gold-burst"
+          style={{
+            left: x,
+            top: y,
+            "--tx": `${tx}px`,
+            "--ty": `${ty}px`
+          } as React.CSSProperties}
+        />
+      );
+    }),
+    [count, x, y]
+  );
 
   return <>{particles}</>;
 }
@@ -172,25 +175,28 @@ export function BluePuffParticle({
   y: number;
   count?: number;
 }) {
-  const particles = Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * Math.PI * 2;
-    const distance = 45 + Math.random() * 35;
-    const tx = Math.cos(angle) * distance;
-    const ty = Math.sin(angle) * distance;
+  const particles = useMemo(
+    () => Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * Math.PI * 2;
+      const distance = 45 + ((i * 13) % 35);
+      const tx = Math.cos(angle) * distance;
+      const ty = Math.sin(angle) * distance;
 
-    return (
-      <div
-        key={i}
-        className="particle-blue-puff"
-        style={{
-          left: x,
-          top: y,
-          "--tx": `${tx}px`,
-          "--ty": `${ty}px`
-        } as React.CSSProperties}
-      />
-    );
-  });
+      return (
+        <div
+          key={i}
+          className="particle-blue-puff"
+          style={{
+            left: x,
+            top: y,
+            "--tx": `${tx}px`,
+            "--ty": `${ty}px`
+          } as React.CSSProperties}
+        />
+      );
+    }),
+    [count, x, y]
+  );
 
   return <>{particles}</>;
 }

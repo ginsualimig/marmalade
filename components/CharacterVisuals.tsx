@@ -1,5 +1,5 @@
 import React from "react";
-export { KeeperCharacter, GoldBurstParticle, BluePuffParticle } from "./KeeperCharacter";
+export { KeeperCharacter, GoldBurstParticle, BluePuffParticle, ArenaEnvironment } from "./KeeperCharacter";
 
 export interface OutfitState {
   hat?: string; // "wizard", "crown", "beanie", "bow"
@@ -248,37 +248,3 @@ export function BossVisuals({
   return null;
 }
 
-/**
- * Arena background environment with kid-friendly aesthetic
- */
-export function ArenaEnvironment() {
-  return (
-    <div className="arena-background" role="presentation" aria-hidden>
-      {/* Layered ground */}
-      <div className="ground-layer base" />
-      <div className="ground-layer shadow" />
-
-      {/* Decorative elements depending on mode */}
-      <div className="arena-decoration left">
-        <div className="banner" />
-        <div className="streamer s1" />
-        <div className="streamer s2" />
-      </div>
-
-      <div className="arena-decoration right">
-        <div className="banner" />
-        <div className="streamer s1" />
-        <div className="streamer s2" />
-      </div>
-
-      {/* Magical/mystical particles */}
-      <div className="particle-field">
-        <div className="particle p1" />
-        <div className="particle p2" />
-        <div className="particle p3" />
-        <div className="particle p4" />
-        <div className="particle p5" />
-      </div>
-    </div>
-  );
-}

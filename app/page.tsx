@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlayerCharacter, BossVisuals, KeeperCharacter, GoldBurstParticle, BluePuffParticle, ArenaEnvironment } from "@/components/CharacterVisuals";
+import { PlayerCharacter, KeeperCharacter, GoldBurstParticle, BluePuffParticle, ArenaEnvironment } from "@/components/CharacterVisuals";
 import {
   clearHighScores,
   clearPreferredLevel,
@@ -32,8 +32,6 @@ import {
   initializeHintTracker,
   recordQuestionAttempt,
   shouldShowHint,
-  shouldInjectDiversity,
-  getNextFamilyByPedagogy,
   generateGrowthSummary,
   loadDiagnostics,
   saveDiagnostics,
@@ -44,7 +42,6 @@ import {
   type RunSummary,
   type StoredHighScores,
   type PowerLevelMap,
-  type PowerLevel,
   type ConceptFamily,
   type RunDiagnostics,
   type GrowthSummary
@@ -76,10 +73,8 @@ import {
 } from "@/lib/game/animations";
 
 type Boss = {
-  id: "charlotte" | "george";
+  id: "keeper";
   name: string;
-  avatarClass: string;
-  colorClass: string;
   subtitle: string;
   taunts: {
     intro: string;
@@ -184,29 +179,15 @@ type BattleState = {
 
 const BOSSES: Boss[] = [
   {
-    id: "charlotte",
-    name: "Moonlight Manticore Lyra",
-    avatarClass: "avatar-charlotte",
-    colorClass: "boss-charlotte",
-    subtitle: "Sparkly Sky Manticore with Riddle Magic",
+    id: "keeper",
+    name: "The Keeper of Patience",
+    subtitle: "Wise guardian of the Tome of Growing Knowledge",
     taunts: {
-      intro: "Twinkle-twist! My moon riddles will spin your brain!",
-      hit: "Oh stars! You cracked my moon riddle!",
-      attack: "Stardust spiral attack! Quick, use your maths power!",
-      defeated: "My moon magic is fading... you outsmarted me!"
-    }
-  },
-  {
-    id: "george",
-    name: "Starwhirl Kraken Orion",
-    avatarClass: "avatar-george",
-    colorClass: "boss-george",
-    subtitle: "Gentle Sea Kraken Who Swirls Number Storms",
-    taunts: {
-      intro: "Splashy swirl! Time for tidal number magic!",
-      hit: "Whoa! That answer calmed my wild tide!",
-      attack: "Kraken whirl bash incoming!",
-      defeated: "You win, hero. My sea storm is officially over!"
+      intro: "Welcome, bright mind. Let us see how calmly you can think.",
+      hit: "Good. You are learning with care and courage.",
+      attack: "Pause, breathe, and solve the next one with focus.",
+      defeated: "You have earned the Tome's trust. Carry that patience forward.",
+      lowHp: "One more steady answer may unlock the final lesson."
     }
   }
 ];
@@ -435,7 +416,7 @@ function createQuestion(
   level: LearnerLevel,
   bossPhase: BossPhase = "phase-1",
   autonomyMode: "maths" | "words" | "mix" = "mix",
-  diagnostics?: RunDiagnostics
+  _diagnostics?: RunDiagnostics
 ): Question {
   // Autonomy mode weighting: how likely to pick maths vs words
   const isMathsRound =
@@ -1401,7 +1382,7 @@ export default function Page() {
                 </div>
               </div>
               <h3>Boss Gets Tougher</h3>
-              <p>As the boss loses health, questions get harder and faster. Stay focused and you'll win!</p>
+              <p>As the boss loses health, questions get harder and faster. Stay focused and you&apos;ll win!</p>
               <div className="onboarding-cues">
                 <span>📊 3 phases + critical</span>
                 <span>🚀 Difficulty scales up</span>
@@ -1419,17 +1400,17 @@ export default function Page() {
                   <span>🏆</span>
                 </div>
               </div>
-              <h3>Defeat All Bosses</h3>
-              <p>Beat one boss and face the next. Defeat all to unlock victory! Your power grows with every question you answer right.</p>
+              <h3>Face the Keeper</h3>
+              <p>Stay calm through one full Keeper battle. Every correct answer builds power and moves you toward the final victory summary.</p>
               <div className="onboarding-cues">
-                <span>🏆 2 bosses total</span>
+                <span>🏆 1 story boss</span>
                 <span>⭐ Earn power levels</span>
               </div>
             </div>
           </div>
 
           <button className="big-btn" onClick={() => setScreen("character-creation")}>
-            I'm Ready to Play! 🎮
+            I&apos;m Ready to Play! 🎮
           </button>
         </section>
       )}
@@ -1797,8 +1778,8 @@ export default function Page() {
                   onChange={(e) => {
                     const nextMode = e.target.value as "maths" | "words" | "mix";
                     setAutonomyMode(nextMode);
-                    const msg = nextMode === "maths" ? "Maths focus: you'll see more numbers and calculations." : 
-                               nextMode === "words" ? "Word focus: you'll see more spelling and language." : 
+                    const msg = nextMode === "maths" ? "Maths focus: you will see more numbers and calculations." : 
+                               nextMode === "words" ? "Word focus: you will see more spelling and language." : 
                                "Mix mode: balanced mix of maths and word skills.";
                     speak(msg, "start");
                   }}
@@ -1851,16 +1832,14 @@ export default function Page() {
           )}
 
           <div className="boss-row">
-            {BOSSES.map((boss) => (
-              <div key={boss.id} className={`boss-preview ${boss.colorClass}`}>
-                <div className={`boss-portrait ${boss.avatarClass}`} aria-hidden>
-                  <div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape flare" />
-                </div>
-                <strong>{boss.name}</strong>
-                <span>{boss.subtitle}</span>
-                <small>“{boss.taunts.intro}”</small>
+            <div className="boss-preview" style={{ background: "linear-gradient(145deg, rgba(236, 221, 187, 0.34), rgba(208, 176, 123, 0.28))" }}>
+              <div style={{ display: "flex", justifyContent: "center", padding: "1rem 0" }} aria-hidden>
+                <KeeperCharacter phase="phase-1" size="small" />
               </div>
-            ))}
+              <strong>{BOSSES[0].name}</strong>
+              <span>{BOSSES[0].subtitle}</span>
+              <small>“{BOSSES[0].taunts.intro}”</small>
+            </div>
           </div>
           <button className="big-btn" onClick={startGame}>Start Adventure</button>
           <button className="ghost-btn" onClick={() => setScreen("parental-controls")}>⚙️ Settings</button>
@@ -1868,7 +1847,7 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card ${currentBoss.colorClass} ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
+        <section className={`card battle-card keeper-encounter ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
           
           <div className="battle-top-controls" role="toolbar" aria-label="Battle controls">
@@ -2095,7 +2074,7 @@ export default function Page() {
               
               {growthSummary.masteringFamilies.length > 0 && (
                 <div style={{ marginTop: "1em" }}>
-                  <strong style={{ color: "#2ecc71" }}>✨ You're mastering:</strong>
+                  <strong style={{ color: "#2ecc71" }}>✨ You&apos;re mastering:</strong>
                   <ul style={{ marginLeft: "1em" }}>
                     {growthSummary.masteringFamilies.map((family) => {
                       const stats = growthSummary.accuracyByFamily[family];
@@ -2111,7 +2090,7 @@ export default function Page() {
               
               {growthSummary.strugglingFamilies.length > 0 && (
                 <div style={{ marginTop: "1em" }}>
-                  <strong style={{ color: "#e67e22" }}>🎯 Focus areas (let's improve these):</strong>
+                  <strong style={{ color: "#e67e22" }}>🎯 Focus areas (let&apos;s improve these):</strong>
                   <ul style={{ marginLeft: "1em" }}>
                     {growthSummary.strugglingFamilies.map((family) => {
                       const stats = growthSummary.accuracyByFamily[family];
