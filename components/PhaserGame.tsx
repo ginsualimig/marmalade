@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import createTitleScene from "@/lib/game/scenes/TitleScene";
 import createBossRushScene, { TouchCommand } from "@/lib/game/scenes/BossRushScene";
+import createGameOverScene from "@/lib/game/scenes/GameOverScene";
 import createCutsceneScene from "@/lib/game/scenes/CutsceneScene";
 import createVictoryScene from "@/lib/game/scenes/VictoryScene";
 
@@ -30,6 +31,7 @@ export default function PhaserGame() {
       const scenes = [
         createTitleScene(PhaserLib),
         createBossRushScene(PhaserLib),
+        createGameOverScene(PhaserLib),
         createCutsceneScene(PhaserLib),
         createVictoryScene(PhaserLib)
       ];

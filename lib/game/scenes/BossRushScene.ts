@@ -18,7 +18,47 @@ const WORDS = [
   "lotus"
 ];
 
+
 const LETTER_POOL = ["M", "S", "C", "G", "T"];
+
+type AttackStyle = "light" | "heavy" | "dragon";
+
+const ATTACK_CONFIG: Record<AttackStyle, { damage: number; width: number; height: number; color: number; mpCost: number; cooldown: number; duration: number; label: string }> = {
+  light: {
+    damage: 12,
+    width: 68,
+    height: 32,
+    color: 0xfff1a8,
+    mpCost: 0,
+    cooldown: 220,
+    duration: 180,
+    label: "Slash"
+  },
+  heavy: {
+    damage: 26,
+    width: 92,
+    height: 40,
+    color: 0xffb495,
+    mpCost: 4,
+    cooldown: 420,
+    duration: 260,
+    label: "Slam"
+  },
+  dragon: {
+    damage: 42,
+    width: 140,
+    height: 60,
+    color: 0xff7cd1,
+    mpCost: 25,
+    cooldown: 900,
+    duration: 320,
+    label: "Dragon"
+  }
+};
+
+const PLAYER_HP_MAX = 100;
+const PLAYER_MP_MAX = 120;
+
 
 export type TouchCommand = {
   type: string;
@@ -68,6 +108,17 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private letterGroup?: Phaser.Physics.Arcade.Group;
   private numberGroup?: Phaser.Physics.Arcade.Group;
   private hazardGroup?: Phaser.Physics.Arcade.Group;
+  private attackGroup?: Phaser.Physics.Arcade.Group;
+  private bossHealthBar!: Phaser.GameObjects.Graphics;
+  private bossAura?: Phaser.GameObjects.Ellipse;
+  private hpValueText!: Phaser.GameObjects.Text;
+  private mpValueText!: Phaser.GameObjects.Text;
+  private bossHealthText!: Phaser.GameObjects.Text;
+  private actionCue?: Phaser.GameObjects.Text;
+  private playerFacing: "left" | "right" = "right";
+  private lastAttackTime = 0;
+  private dragonReadyAt = 0;
+  private mpTicker?: Phaser.Time.TimerEvent;
 
   private mathGate?: Phaser.GameObjects.Rectangle;
   private mathGateTarget = 0;
@@ -108,6 +159,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.spawnMathGate();
     this.scheduleEducationalEvents();
     this.startBossLoop();
+    this.startMPRegen();
   }
 
   update() {
@@ -115,6 +167,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.handleAttacks();
     this.cleanupOutOfBounds();
     this.updateUI();
+    this.updateBossAura();
+    this.updateActionCue();
   }
 
   private createWorld() {
@@ -126,17 +180,27 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private createPlayer() {
     this.player = this.add.rectangle(140, 520, 38, 60, 0xffc573);
+    this.playerFacing = "right";
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     this.playerBody.setCollideWorldBounds(true);
     this.playerBody.setBounce(0.1);
+    this.playerBody.setSize(32, 56);
+    this.playerBody.setMaxVelocity(260, 640);
+    this.playerBody.setDragX(800);
     this.playerBody.setGravityY(900);
+    this.player.setDepth(2);
     this.physics.add.collider(this.player, this.ground);
   }
 
   private createBoss() {
     const bossColor = this.currentBoss?.color ?? 0xff5c8d;
     this.boss = this.add.rectangle(650, 470, 100, 120, bossColor);
+    this.bossAura = this.add
+      .ellipse(this.boss.x, this.boss.y, 180, 120, bossColor, 0.2)
+      .setStrokeStyle(2, 0xffffff, 0.2)
+      .setDepth(0);
+    this.boss.setDepth(1);
     this.physics.add.existing(this.boss);
     this.bossBody = this.boss.body as Phaser.Physics.Arcade.Body;
     this.bossBody.setImmovable(true);
@@ -151,14 +215,34 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private createUI() {
     this.hpBar = this.add.graphics();
     this.mpBar = this.add.graphics();
+    this.hpValueText = this.add
+      .text(16, 6, `HP ${this.playerHP}/${PLAYER_HP_MAX}`, {
+        fontSize: "12px",
+        color: "#ff9ea0"
+      })
+      .setDepth(2);
+    this.mpValueText = this.add
+      .text(16, 48, `MP ${this.playerMP}/${PLAYER_MP_MAX}`, {
+        fontSize: "12px",
+        color: "#8fdcff"
+      })
+      .setDepth(2);
+    this.bossHealthBar = this.add.graphics();
+    this.bossHealthText = this.add
+      .text(400, 6, `${this.currentBoss?.name} HP: ${this.bossHP}/${this.bossMaxHP}`, {
+        fontSize: "15px",
+        color: "#ffd37f"
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(2);
     this.comboText = this.add
-      .text(16, 36, `Combo x${this.comboCount}`, {
+      .text(16, 76, `Combo x${this.comboCount}`, {
         color: "#ffd37f",
         fontSize: "16px"
       })
       .setDepth(2);
     this.scoreText = this.add
-      .text(16, 60, `Score: ${this.score}`, {
+      .text(16, 102, `Score: ${this.score}`, {
         color: "#85f2ff",
         fontSize: "16px"
       })
@@ -190,6 +274,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.letterGroup = this.physics.add.group();
     this.numberGroup = this.physics.add.group();
     this.hazardGroup = this.physics.add.group();
+    this.attackGroup = this.physics.add.group();
 
     if (this.player) {
       this.physics.add.overlap(this.player, this.wordGroup, this.handleWordCollision, undefined, this);
@@ -253,19 +338,29 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private handleMovement() {
-    if (!this.playerBody) return;
+    if (!this.playerBody || !this.player) return;
     let velocityX = 0;
     if ((this.cursors?.left?.isDown || this.touchState.left) && !this.cursors?.right?.isDown) {
-      velocityX = -200;
+      velocityX = -220;
     }
     if ((this.cursors?.right?.isDown || this.touchState.right) && !this.cursors?.left?.isDown) {
-      velocityX = 200;
+      velocityX = 220;
     }
 
     this.playerBody.setVelocityX(velocityX);
+    if (velocityX < 0) {
+      this.playerFacing = "left";
+      this.player.setFillStyle(0xffb052);
+    } else if (velocityX > 0) {
+      this.playerFacing = "right";
+      this.player.setFillStyle(0xffd27a);
+    } else {
+      this.player.setFillStyle(0xffc573);
+    }
 
     if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
       this.performJump();
+      this.player.setFillStyle(0xfff2a3);
     }
   }
 
@@ -287,22 +382,32 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     }
   }
 
-  private performAttack(style: "light" | "heavy" | "dragon") {
+  private performAttack(style: AttackStyle) {
     if (!this.currentBoss) return;
-    let damage = 0;
-    if (style === "light") {
-      damage = 12;
-    } else if (style === "heavy") {
-      damage = 26;
+    const config = ATTACK_CONFIG[style];
+    const now = this.time.now;
+    if (style !== "dragon" && now - this.lastAttackTime < config.cooldown) {
+      return;
+    }
+    if (style === "dragon" && now < this.dragonReadyAt) {
+      this.displayBreach("Dragon is still charging");
+      return;
+    }
+    if (this.playerMP < config.mpCost) {
+      this.displayBreach("Need more MP for Dragon Special");
+      return;
+    }
+    this.playerMP = Math.max(0, this.playerMP - config.mpCost);
+    if (style === "dragon") {
+      this.dragonReadyAt = now + config.cooldown;
     } else {
-      if (this.playerMP < 25) {
-        this.displayBreach("Need more MP for Dragon Special");
-        return;
-      }
-      damage = 42;
-      this.playerMP = Math.max(0, this.playerMP - 25);
+      this.lastAttackTime = now;
     }
 
+    this.spawnAttackEffect(style, config);
+    this.showPlayerCue(config.label, config.color);
+
+    let damage = config.damage;
     if (this.bossShield) {
       damage = Math.round(damage * 0.4);
       this.displayBreach("Shielded! Aim for a weak spot.");
@@ -310,6 +415,116 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
     this.applyComboDamage(damage);
   }
+
+  private spawnAttackEffect(style: AttackStyle, config: (typeof ATTACK_CONFIG)[AttackStyle]) {
+    if (!this.player) return;
+    const direction = this.playerFacing === "right" ? 1 : -1;
+    const zone = this.add.rectangle(
+      this.player.x + direction * (config.width / 2 + 12),
+      this.player.y - 6,
+      config.width,
+      config.height,
+      config.color,
+      0.68
+    )
+      .setOrigin(direction > 0 ? 0 : 1, 0.5)
+      .setDepth(3);
+    this.attackGroup?.add(zone);
+    this.physics.add.existing(zone);
+    const body = zone.body as Phaser.Physics.Arcade.Body;
+    body.allowGravity = false;
+    body.setImmovable(true);
+    body.setEnable(false);
+    this.tweens.add({
+      targets: zone,
+      alpha: 0,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      duration: config.duration,
+      ease: "Quad.easeOut",
+      onComplete: () => zone.destroy()
+    });
+    if (style === "dragon") {
+      this.spawnDragonBurst();
+    }
+  }
+
+  private spawnDragonBurst() {
+    if (!this.player) return;
+    const circle = this.add
+      .ellipse(this.player.x, this.player.y - 20, 64, 32, 0xff7cd1, 0.22)
+      .setStrokeStyle(2, 0xff7cd1)
+      .setDepth(2);
+    this.tweens.add({
+      targets: circle,
+      scaleX: 2,
+      scaleY: 2,
+      alpha: 0,
+      duration: 640,
+      ease: "Cubic.easeOut",
+      onComplete: () => circle.destroy()
+    });
+  }
+
+  private showPlayerCue(label: string, color: number) {
+    if (!this.player) return;
+    const hex = this.formatHexColor(color);
+    if (!this.actionCue) {
+      this.actionCue = this.add
+        .text(this.player.x, this.player.y - 70, label, {
+          fontSize: "20px",
+          fontStyle: "bold",
+          color: hex
+        })
+        .setOrigin(0.5)
+        .setDepth(5);
+    } else {
+      this.actionCue.setText(label);
+      this.actionCue.setColor(hex);
+      this.actionCue.setAlpha(1);
+    }
+    this.tweens.add({
+      targets: this.actionCue,
+      y: this.player.y - 110,
+      alpha: 0,
+      duration: 520,
+      ease: "Cubic.easeOut"
+    });
+  }
+
+  private updateActionCue() {
+    if (this.actionCue && this.player) {
+      this.actionCue.setPosition(this.player.x, this.player.y - 70);
+    }
+  }
+
+  private formatHexColor(color: number) {
+    return `#${color.toString(16).padStart(6, "0")}`;
+  }
+
+  private updateBossAura() {
+    if (!this.bossAura || !this.boss) return;
+    const pulse = 1 + Math.sin(this.time.now / 230) * 0.08;
+    this.bossAura.setScale(pulse);
+    this.bossAura.setPosition(this.boss.x, this.boss.y);
+    this.bossAura.setStrokeStyle(2, this.currentBoss?.color ?? 0xffffff, this.bossShield ? 0.6 : 0.25);
+  }
+
+  private startMPRegen() {
+    this.mpTicker?.remove(false);
+    this.mpTicker = this.time.addEvent({
+      delay: 1500,
+      loop: true,
+      callback: this.regenMP,
+      callbackScope: this
+    });
+  }
+
+  private regenMP() {
+    if (this.playerMP >= PLAYER_MP_MAX) return;
+    this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 6);
+  }
+
 
   private applyComboDamage(baseDamage: number) {
     const now = this.time.now;
@@ -373,34 +588,108 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   }
 
   private launchCharlotteMove() {
-    const option = Phaser.Math.Between(0, 2);
+    const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
-      this.dashBossTowardPlayer(-350, -40);
+      this.dashBossTowardPlayer(-360, -50);
+      this.bossPhaseText.setText("Charlotte charges!");
     } else if (option === 1) {
-      this.launchProjectile("toy", 120, 0xffd6fb);
+      this.launchCharlotteToyStorm();
+    } else if (option === 2) {
+      this.spawnCharlotteSlam();
     } else {
-      this.launchProjectile("jump", 60, 0xff9ae8);
+      this.launchProjectile("toy", 130, 0xffd6fb);
     }
 
-    if (this.bossHP / this.bossMaxHP < 0.4 && !this.bossShield) {
+    if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
       this.activateShieldPhase("Shield: block the toy throws!");
     }
+  }
+
+  private launchCharlotteToyStorm() {
+    this.bossPhaseText.setText("Toy storm incoming!");
+    for (let i = 0; i < 3; i++) {
+      this.time.delayedCall(i * 180, () => {
+        this.launchProjectile("toy", 120 + i * 20, 0xffd6fb);
+      });
+    }
+  }
+
+  private spawnCharlotteSlam() {
+    this.bossPhaseText.setText("Jump slam!");
+    const slam = this.add.rectangle(this.boss.x, 580, 220, 18, 0xff9ae8, 0.6);
+    this.physics.add.existing(slam);
+    const body = slam.body as Phaser.Physics.Arcade.Body;
+    body.setImmovable(true);
+    body.allowGravity = false;
+    this.hazardGroup?.add(slam);
+    this.tweens.add({
+      targets: slam,
+      width: 280,
+      alpha: 0,
+      duration: 700,
+      ease: "Quad.easeIn"
+    });
+    this.time.delayedCall(2200, () => {
+      slam.destroy();
+    });
   }
 
   private launchGeorgeMove() {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
-      this.launchProjectile("spin", 200, 0x4dd0ff);
+      this.launchGeorgeSpin(6);
+      this.bossPhaseText.setText("George spins wildly!");
     } else if (option === 1) {
       this.launchProjectile("diagonal", 160, 0x15ffa0);
-    } else {
+    } else if (option === 2) {
       this.spawnDroolPuddle();
+    } else {
+      this.launchGeorgeSpinWave();
     }
 
-    if (this.bossHP / this.bossMaxHP < 0.4 && !this.bossShield) {
+    if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
       this.activateShieldPhase("Meltdown! Intense tantrum spin");
-      this.spawnDroolPuddle();
+      this.launchGeorgeSpin(8);
     }
+  }
+
+  private launchGeorgeSpin(count: number) {
+    this.bossPhaseText.setText("Spin tantrum!");
+    const color = 0x4dd0ff;
+    for (let i = 0; i < count; i++) {
+      this.time.delayedCall(i * 120, () => {
+        const angle = (i / count) * Math.PI * 2;
+        const projectile = this.add.circle(this.boss.x, this.boss.y, 10, color, 0.9);
+        this.physics.add.existing(projectile);
+        const body = projectile.body as Phaser.Physics.Arcade.Body;
+        body.setVelocity(Math.cos(angle) * 220, Math.sin(angle) * 220 - 15);
+        body.setBounce(0.4);
+        body.setGravityY(320);
+        body.setCollideWorldBounds(true);
+        this.hazardGroup?.add(projectile);
+        this.time.delayedCall(2600, () => {
+          projectile.destroy();
+        });
+      });
+    }
+  }
+
+  private launchGeorgeSpinWave() {
+    if (!this.player) return;
+    this.bossPhaseText.setText("Drool wave!");
+    const wave = this.add.rectangle(this.player.x, 600, 260, 16, 0x15ffa0, 0.5);
+    this.physics.add.existing(wave, true);
+    this.hazardGroup?.add(wave);
+    this.tweens.add({
+      targets: wave,
+      width: 420,
+      alpha: 0,
+      duration: 760,
+      ease: "Quad.easeOut"
+    });
+    this.time.delayedCall(2500, () => {
+      wave.destroy();
+    });
   }
 
   private dashBossTowardPlayer(forceX: number, forceY: number) {
@@ -593,13 +882,22 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.hpBar.fillStyle(0x21142f, 1);
     this.hpBar.fillRoundedRect(16, 16, 230, 12, 4);
     this.hpBar.fillStyle(0xff4d6d, 1);
-    this.hpBar.fillRoundedRect(16, 16, Phaser.Math.Clamp((this.playerHP / 100) * 230, 0, 230), 12, 4);
+    this.hpBar.fillRoundedRect(16, 16, Phaser.Math.Clamp((this.playerHP / PLAYER_HP_MAX) * 230, 0, 230), 12, 4);
+    this.hpValueText?.setText(`HP ${Math.max(0, this.playerHP)}/${PLAYER_HP_MAX}`);
 
     this.mpBar.clear();
     this.mpBar.fillStyle(0x131238, 1);
     this.mpBar.fillRoundedRect(16, 32, 230, 8, 3);
     this.mpBar.fillStyle(0x4cc7ff, 1);
-    this.mpBar.fillRoundedRect(16, 32, Phaser.Math.Clamp((this.playerMP / 120) * 230, 0, 230), 8, 3);
+    this.mpBar.fillRoundedRect(16, 32, Phaser.Math.Clamp((this.playerMP / PLAYER_MP_MAX) * 230, 0, 230), 8, 3);
+    this.mpValueText?.setText(`MP ${Math.max(0, this.playerMP)}/${PLAYER_MP_MAX}`);
+
+    this.bossHealthBar.clear();
+    this.bossHealthBar.fillStyle(0x15152a, 1);
+    this.bossHealthBar.fillRoundedRect(300, 12, 240, 12, 4);
+    this.bossHealthBar.fillStyle(0xff9ae8, 1);
+    this.bossHealthBar.fillRoundedRect(300, 12, Phaser.Math.Clamp((this.bossHP / Math.max(1, this.bossMaxHP)) * 240, 0, 240), 12, 4);
+    this.bossHealthText?.setText(`${this.currentBoss?.name} HP: ${Math.max(0, this.bossHP)}/${this.bossMaxHP}`);
   }
 
   private displayBreach(message: string) {
