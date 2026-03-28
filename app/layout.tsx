@@ -1,8 +1,8 @@
 import "@/styles/globals.css";
 
 export const metadata = {
-  title: "Marmalade: Quiz Boss Battle",
-  description: "Kid-friendly web game where spelling and maths answers power boss battles against Charlotte and George."
+  title: "Marmalade: Bad Guy Quiz Showdown",
+  description: "Kid-friendly web game where spelling and maths answers stop Queen Mischief Charlotte and Captain Chaos George."
 };
 
 export default function RootLayout({

@@ -1,4 +1,5 @@
 export type DifficultyMode = "sprout" | "spark" | "comet";
+export type LearnerLevel = "beginner" | "growing" | "expert";
 
 export type ParentSettings = {
   persistDifficulty: boolean;
@@ -22,6 +23,7 @@ export type RunSummary = {
 
 export type PersistedRun<TBattle> = {
   mode: DifficultyMode;
+  level?: LearnerLevel;
   battle: TBattle;
   checkpoint: TBattle | null;
   savedAt: number;
@@ -29,6 +31,7 @@ export type PersistedRun<TBattle> = {
 
 const SETTINGS_KEY = "marmalade-parent-settings-v1";
 const MODE_KEY = "marmalade-mode-v1";
+const LEVEL_KEY = "marmalade-level-v1";
 const HIGH_SCORE_KEY = "marmalade-high-scores-v1";
 const SUMMARY_KEY = "marmalade-run-summaries-v1";
 const PROGRESS_KEY = "marmalade-progress-v1";
@@ -78,9 +81,25 @@ export const savePreferredMode = (mode: DifficultyMode) => {
   window.localStorage.setItem(MODE_KEY, mode);
 };
 
+export const loadPreferredLevel = (): LearnerLevel | null => {
+  if (!isBrowser()) return null;
+  const level = window.localStorage.getItem(LEVEL_KEY);
+  return level === "beginner" || level === "growing" || level === "expert" ? level : null;
+};
+
+export const savePreferredLevel = (level: LearnerLevel) => {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(LEVEL_KEY, level);
+};
+
 export const clearPreferredMode = () => {
   if (!isBrowser()) return;
   window.localStorage.removeItem(MODE_KEY);
+};
+
+export const clearPreferredLevel = () => {
+  if (!isBrowser()) return;
+  window.localStorage.removeItem(LEVEL_KEY);
 };
 
 const sanitizeScore = (value: unknown) => {

@@ -729,9 +729,9 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private queueBossAction() {
     if (!this.currentBoss || this.isTransitioning) return;
     const warningMessage =
-      this.currentBoss.name === "Charlotte"
-        ? "Charlotte is readying another toy!"
-        : "George is winding up the next tantrum!";
+      this.currentBossIndex === 0
+        ? "Queen Mischief Charlotte is readying another toy!"
+        : "Captain Chaos George is winding up the next tantrum!";
     this.clearBossPrepSignal();
     this.showBossPrepSignal(warningMessage);
     playAudioCue("warning");
@@ -746,8 +746,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private performBossAction() {
     if (!this.currentBoss || this.isTransitioning) return;
-    const bossName = this.currentBoss.name;
-    if (bossName === "Charlotte") {
+    if (this.currentBossIndex === 0) {
       this.launchCharlotteMove();
     } else {
       this.launchGeorgeMove();
@@ -758,7 +757,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
       this.dashBossTowardPlayer(-360, -50);
-      this.bossPhaseText.setText("Charlotte charges!");
+      this.bossPhaseText.setText("Queen Charlotte charges!");
     } else if (option === 1) {
       this.launchCharlotteToyStorm();
     } else if (option === 2) {
@@ -806,7 +805,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
       this.launchGeorgeSpin(5);
-      this.bossPhaseText.setText("George spins wildly!");
+      this.bossPhaseText.setText("Captain George spins wildly!");
     } else if (option === 1) {
       this.launchProjectile("diagonal", 160, 0x15ffa0);
     } else if (option === 2) {

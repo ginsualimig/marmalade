@@ -3,26 +3,31 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   clearHighScores,
+  clearPreferredLevel,
   clearPreferredMode,
   clearProgress,
   clearRunSummaries,
   loadHighScores,
   loadParentSettings,
+  loadPreferredLevel,
   loadPreferredMode,
   loadProgress,
   loadRunSummaries,
   saveHighScores,
   saveParentSettings,
+  savePreferredLevel,
   savePreferredMode,
   saveProgress,
   saveRunSummaries,
   currentTimestamp,
   createRunId,
   type DifficultyMode,
+  type LearnerLevel,
   type ParentSettings,
   type RunSummary,
   type StoredHighScores
 } from "@/lib/game/quizPersistence";
+import { MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS } from "@/lib/game/curriculum";
 
 type Boss = {
   id: "charlotte" | "george";
@@ -52,11 +57,31 @@ type ModeConfig = {
   spellingWords: string[];
 };
 
+type SkillArea =
+  | "spelling-missing-letter"
+  | "spelling-beginning-sound"
+  | "spelling-word-ending"
+  | "spelling-letter-count"
+  | "spelling-vowel-sound"
+  | "spelling-unscramble"
+  | "math-add-subtract"
+  | "math-missing-number"
+  | "math-two-step"
+  | "math-multiplication";
+
 type Question = {
   prompt: string;
   typeLabel: "Spelling" | "Maths";
+  skillArea: SkillArea;
+  inputMode: "choice" | "typed";
   options: string[];
   correct: string;
+  placeholder?: string;
+};
+
+type SkillProgress = {
+  attempts: number;
+  correct: number;
 };
 
 type BattleStats = {
@@ -67,6 +92,7 @@ type BattleStats = {
   bossesDefeated: number;
   streak: number;
   maxStreak: number;
+  skillProgress: Record<SkillArea, SkillProgress>;
 };
 
 type BattleState = {
@@ -84,93 +110,91 @@ type BattleState = {
 const BOSSES: Boss[] = [
   {
     id: "charlotte",
-    name: "Charlotte",
+    name: "Queen Mischief Charlotte",
     avatarClass: "avatar-charlotte",
     colorClass: "boss-charlotte",
-    subtitle: "Sparkle Dragon Queen of Tricky Brain Quests",
+    subtitle: "Trouble-Making Toy Dragon Who Loves Tricky Quizzes",
     taunts: {
-      intro: "Kneel before my puzzle crown!",
-      hit: "What?! You cracked my royal riddle!",
-      attack: "Royal fireball! Mind your maths!",
-      defeated: "My crown... outsmarted by a tiny legend!"
+      intro: "Hee-hee! My puzzle tricks will tangle your brain!",
+      hit: "No fair! You spotted my sneaky trick!",
+      attack: "Toy tornado attack! Quick, use your maths power!",
+      defeated: "My mischief meter is empty... you outsmarted me!"
     }
   },
   {
     id: "george",
-    name: "George",
+    name: "Captain Chaos George",
     avatarClass: "avatar-george",
     colorClass: "boss-george",
-    subtitle: "Goofy Dino Captain of Number Nonsense",
+    subtitle: "Silly Dino Prankster of Number Mayhem",
     taunts: {
-      intro: "RAWR! I attack with silly sums!",
-      hit: "Whoa! That answer bonked my snout!",
-      attack: "Dino boing-bash incoming!",
-      defeated: "Okay okay, you win... can we be pals?"
+      intro: "Rawr-ha-ha! Time for chaotic number pranks!",
+      hit: "Yikes! That answer clobbered my prank plan!",
+      attack: "Chaos bounce bash incoming!",
+      defeated: "You win, hero. My chaos day is officially over!"
     }
   }
 ];
 
-const SPELLING_SETS: Record<DifficultyMode, string[]> = {
-  sprout: [
-    "cat", "sun", "hat", "fish", "cake", "star", "book", "frog", "smile", "apple",
-    "moon", "nest", "lamp", "train", "cloud", "grape", "bread", "chair", "plant", "tiger",
-    "beach", "truck", "sheep", "green"
-  ],
-  spark: [
-    "planet", "pencil", "puzzle", "rocket", "dragon", "jungle", "castle", "thunder", "school", "artist",
-    "window", "bridge", "garden", "library", "magnet", "blanket", "picture", "kitchen", "harvest", "whisper",
-    "bicycle", "captain", "marble", "forest"
-  ],
-  comet: [
-    "adventure", "chocolate", "mountain", "treasure", "triangle", "notebook", "microscope", "elephant", "rainbow", "crocodile",
-    "astronaut", "dinosaur", "happiness", "volcano", "diamond", "calendar", "geometry", "algorithm", "satellite", "champion",
-    "festival", "landscape", "hurricane", "knowledge"
-  ]
-};
-
-const MODE_CONFIGS: Record<DifficultyMode, ModeConfig> = {
-  sprout: {
-    label: "Sprout",
-    ageBand: "Ages 4-6",
-    subtitle: "Gentle mode: easier words + basic sums",
-    playerMaxHp: 120,
-    bossMaxHp: 90,
-    correctDamage: 22,
-    wrongDamage: 11,
-    mathMax: 10,
-    allowTwoStepMath: false,
-    spellingWords: SPELLING_SETS.sprout
-  },
-  spark: {
-    label: "Spark",
-    ageBand: "Ages 7-9",
-    subtitle: "Balanced mode: bigger words + mixed arithmetic",
-    playerMaxHp: 100,
-    bossMaxHp: 105,
-    correctDamage: 20,
-    wrongDamage: 14,
-    mathMax: 16,
-    allowTwoStepMath: true,
-    spellingWords: SPELLING_SETS.spark
-  },
-  comet: {
-    label: "Comet",
-    ageBand: "Ages 10+",
-    subtitle: "Challenge mode: tougher words + multi-step maths",
-    playerMaxHp: 92,
-    bossMaxHp: 120,
-    correctDamage: 18,
-    wrongDamage: 17,
-    mathMax: 22,
-    allowTwoStepMath: true,
-    spellingWords: SPELLING_SETS.comet
-  }
-};
 
 const MODE_DECOR: Record<DifficultyMode, { icon: string; badge: string }> = {
   sprout: { icon: "🌱", badge: "Gentle Start" },
   spark: { icon: "⚡", badge: "Balanced Quest" },
   comet: { icon: "☄️", badge: "Big Brain Mode" }
+};
+
+type AgeBand = "ages-4-6" | "ages-7-9" | "ages-10-plus";
+
+type LevelTuning = {
+  label: string;
+  blurb: string;
+  typedChance: number;
+  multiplicationChance: number;
+  twoStepChance: number;
+  mathShift: number;
+  allowUnscramble: boolean;
+};
+
+const AGE_TO_MODE: Record<AgeBand, DifficultyMode> = {
+  "ages-4-6": "sprout",
+  "ages-7-9": "spark",
+  "ages-10-plus": "comet"
+};
+
+const MODE_TO_AGE: Record<DifficultyMode, AgeBand> = {
+  sprout: "ages-4-6",
+  spark: "ages-7-9",
+  comet: "ages-10-plus"
+};
+
+const LEVEL_TUNING: Record<LearnerLevel, LevelTuning> = {
+  beginner: {
+    label: "Beginner",
+    blurb: "More multiple-choice and gentler numbers",
+    typedChance: 0.2,
+    multiplicationChance: 0.08,
+    twoStepChance: 0.18,
+    mathShift: -3,
+    allowUnscramble: false
+  },
+  growing: {
+    label: "Growing",
+    blurb: "Balanced typing and challenge",
+    typedChance: 0.4,
+    multiplicationChance: 0.2,
+    twoStepChance: 0.35,
+    mathShift: 0,
+    allowUnscramble: true
+  },
+  expert: {
+    label: "Expert",
+    blurb: "More typed answers and trickier quests",
+    typedChance: 0.65,
+    multiplicationChance: 0.35,
+    twoStepChance: 0.5,
+    mathShift: 3,
+    allowUnscramble: true
+  }
 };
 
 const pick = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
@@ -205,22 +229,48 @@ const uniqueOptions = (correct: string, distractors: string[]) => {
   return Array.from(set).slice(0, 4).sort(() => Math.random() - 0.5);
 };
 
-function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode): Question {
+const asTyped = (question: Omit<Question, "inputMode">): Question => ({
+  ...question,
+  inputMode: "typed",
+  options: [],
+  placeholder: question.typeLabel === "Maths" ? "Type a number" : "Type your answer"
+});
+
+const withInputMode = (question: Omit<Question, "inputMode">, level: LearnerLevel): Question => {
+  const typedAllowed = question.correct.length <= 16;
+  if (typedAllowed && Math.random() < LEVEL_TUNING[level].typedChance) {
+    return asTyped(question);
+  }
+  return { ...question, inputMode: "choice" };
+};
+
+const normalizeAnswer = (question: Question, value: string) => {
+  const trimmed = value.trim();
+  if (question.typeLabel === "Maths") {
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? String(parsed) : trimmed;
+  }
+  return trimmed.toLowerCase();
+};
+
+function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
   const word = pick(config.spellingWords);
-  const variant = Math.floor(Math.random() * 6);
+  const tuning = LEVEL_TUNING[level];
+  const variantPool = tuning.allowUnscramble ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4];
+  const variant = pick(variantPool);
 
   if (variant === 0) {
     const blankIndex = Math.max(1, Math.min(word.length - 2, Math.floor(Math.random() * word.length)));
     const correct = word[blankIndex];
     const promptWord = `${word.slice(0, blankIndex)}_${word.slice(blankIndex + 1)}`;
     const distractors = alphabet.filter((letter) => letter !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return { typeLabel: "Spelling", prompt: `Letter detective! Fill the missing letter: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) };
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-missing-letter", prompt: `Letter detective! Fill the missing letter: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level);
   }
 
   if (variant === 1) {
     const correct = word[0];
     const distractors = alphabet.filter((letter) => letter !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return { typeLabel: "Spelling", prompt: `Which letter starts "${word}"?`, correct, options: uniqueOptions(correct, distractors) };
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-beginning-sound", prompt: `Which letter starts "${word}"?`, correct, options: uniqueOptions(correct, distractors) }, level);
   }
 
   if (variant === 2) {
@@ -228,13 +278,13 @@ function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode): Quest
     const correct = word.slice(-endingLength);
     const stem = word.slice(0, -endingLength);
     const distractors = SPELLING_ENDINGS[mode].filter((x) => x !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return { typeLabel: "Spelling", prompt: `Word builder: complete ${stem}${"_".repeat(endingLength)}`, correct, options: uniqueOptions(correct, distractors) };
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-word-ending", prompt: `Word builder: complete ${stem}${"_".repeat(endingLength)}`, correct, options: uniqueOptions(correct, distractors) }, level);
   }
 
   if (variant === 3) {
     const letters = word.length;
     const distractors = [letters + 1, Math.max(2, letters - 1), letters + 2].map(String);
-    return { typeLabel: "Spelling", prompt: `How many letters are in "${word}"?`, correct: String(letters), options: uniqueOptions(String(letters), distractors) };
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-letter-count", prompt: `How many letters are in "${word}"?`, correct: String(letters), options: uniqueOptions(String(letters), distractors) }, level);
   }
 
   if (variant === 4) {
@@ -244,36 +294,37 @@ function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode): Quest
       const correct = word[vowelIndex];
       const promptWord = `${word.slice(0, vowelIndex)}_${word.slice(vowelIndex + 1)}`;
       const distractors = vowels.filter((v) => v !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-      return { typeLabel: "Spelling", prompt: `Pick the vowel to finish this word: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) };
+      return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-vowel-sound", prompt: `Pick the vowel to finish this word: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level);
     }
   }
 
   const scrambled = word.split("").sort(() => Math.random() - 0.5).join("");
   const distractors = config.spellingWords.filter((w) => w !== word).sort(() => Math.random() - 0.5).slice(0, 3);
-  return { typeLabel: "Spelling", prompt: `Unscramble this word: ${scrambled}`, correct: word, options: uniqueOptions(word, distractors) };
+  return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-unscramble", prompt: `Unscramble this word: ${scrambled}`, correct: word, options: uniqueOptions(word, distractors) }, level);
 }
 
-function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode): Question {
-  const max = config.mathMax;
+function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
+  const tuning = LEVEL_TUNING[level];
+  const max = Math.max(6, config.mathMax + tuning.mathShift);
   const a = Math.floor(Math.random() * max) + 1;
   const b = Math.floor(Math.random() * max) + 1;
 
-  if (mode !== "sprout" && Math.random() > 0.68) {
+  if (mode !== "sprout" && Math.random() < tuning.multiplicationChance) {
     const base = Math.max(2, Math.floor(max / 2));
     const x = Math.floor(Math.random() * base) + 2;
-    const y = Math.floor(Math.random() * 6) + 2;
+    const y = Math.floor(Math.random() * (level === "expert" ? 8 : 6)) + 2;
     const result = x * y;
     const distractors = [result + y, Math.max(0, result - y), result + 2].map(String);
-    return { typeLabel: "Maths", prompt: `${boss.name} says: ${x} × ${y} = ?`, correct: String(result), options: uniqueOptions(String(result), distractors) };
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-multiplication", prompt: `${boss.name} says: ${x} × ${y} = ?`, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
   }
 
-  if (config.allowTwoStepMath && Math.random() > 0.55) {
+  if (config.allowTwoStepMath && Math.random() < tuning.twoStepChance) {
     const c = Math.floor(Math.random() * Math.max(4, Math.floor(max / 2))) + 1;
     const plusFirst = Math.random() > 0.5;
     const result = plusFirst ? a + b - c : a + c - b;
     const prompt = plusFirst ? `Step quest: (${a} + ${b}) - ${c} = ?` : `Step quest: (${a} + ${c}) - ${b} = ?`;
     const distractors = [result + 1, Math.max(0, result - 2), result + 3].map(String);
-    return { typeLabel: "Maths", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) };
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-two-step", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
   }
 
   if (Math.random() > 0.66) {
@@ -282,34 +333,47 @@ function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode
     const prompt = missingLeft ? `? + ${b} = ${total}` : `${a} + ? = ${total}`;
     const correct = missingLeft ? a : b;
     const distractors = [correct + 1, Math.max(0, correct - 1), correct + 2].map(String);
-    return { typeLabel: "Maths", prompt, correct: String(correct), options: uniqueOptions(String(correct), distractors) };
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-missing-number", prompt, correct: String(correct), options: uniqueOptions(String(correct), distractors) }, level);
   }
 
   const usePlus = Math.random() > 0.35;
   const result = usePlus ? a + b : Math.max(0, a - Math.min(a, b));
   const prompt = usePlus ? `${a} + ${b} = ?` : `${a} - ${Math.min(a, b)} = ?`;
   const distractors = [result + 1, Math.max(0, result - 1), result + 2].map(String);
-  return { typeLabel: "Maths", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) };
+  return withInputMode({ typeLabel: "Maths", skillArea: "math-add-subtract", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
 }
 
-function createQuestion(boss: Boss, round: number, config: ModeConfig, mode: DifficultyMode): Question {
-  return round % 2 === 0 ? createSpellingQuestion(config, mode) : createMathQuestion(boss, config, mode);
+function createQuestion(boss: Boss, round: number, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
+  return round % 2 === 0 ? createSpellingQuestion(config, mode, level) : createMathQuestion(boss, config, mode, level);
 }
 
-const initialStats = (): BattleStats => ({ correctAnswers: 0, wrongAnswers: 0, spellingCorrect: 0, mathsCorrect: 0, bossesDefeated: 0, streak: 0, maxStreak: 0 });
-const createInitialBattleState = (config: ModeConfig, mode: DifficultyMode): BattleState => ({
+const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
+  "spelling-missing-letter": { attempts: 0, correct: 0 },
+  "spelling-beginning-sound": { attempts: 0, correct: 0 },
+  "spelling-word-ending": { attempts: 0, correct: 0 },
+  "spelling-letter-count": { attempts: 0, correct: 0 },
+  "spelling-vowel-sound": { attempts: 0, correct: 0 },
+  "spelling-unscramble": { attempts: 0, correct: 0 },
+  "math-add-subtract": { attempts: 0, correct: 0 },
+  "math-missing-number": { attempts: 0, correct: 0 },
+  "math-two-step": { attempts: 0, correct: 0 },
+  "math-multiplication": { attempts: 0, correct: 0 }
+});
+
+const initialStats = (): BattleStats => ({ correctAnswers: 0, wrongAnswers: 0, spellingCorrect: 0, mathsCorrect: 0, bossesDefeated: 0, streak: 0, maxStreak: 0, skillProgress: createInitialSkillProgress() });
+const createInitialBattleState = (config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): BattleState => ({
   bossIndex: 0,
   bossHp: config.bossMaxHp,
   playerHp: config.playerMaxHp,
   round: 0,
-  question: createQuestion(BOSSES[0], 0, config, mode),
-  feedback: `Charlotte appears! ${BOSSES[0].taunts.intro}`,
+  question: createQuestion(BOSSES[0], 0, config, mode, level),
+  feedback: `${BOSSES[0].name} appears! ${BOSSES[0].taunts.intro}`,
   phase: "quiz",
   lastHit: null,
   stats: initialStats()
 });
 
-const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, playerHp: number, stats: BattleStats): BattleState => {
+const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: LearnerLevel, playerHp: number, stats: BattleStats): BattleState => {
   const cfg = MODE_CONFIGS[mode];
   const boss = BOSSES[bossIndex];
   return {
@@ -317,7 +381,7 @@ const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, playerHp:
     bossHp: cfg.bossMaxHp,
     playerHp,
     round: 0,
-    question: createQuestion(boss, 0, cfg, mode),
+    question: createQuestion(boss, 0, cfg, mode, level),
     feedback: `${boss.name} jumps in! ${boss.taunts.intro}`,
     phase: "quiz",
     lastHit: null,
@@ -378,11 +442,62 @@ function buildWrongFeedback(boss: Boss, question: Question) {
   return `${pickLine(COACH_RETRY)} ${boss.taunts.attack} ${learning}`;
 }
 
+
+const SKILL_LABELS: Record<SkillArea, string> = {
+  "spelling-missing-letter": "Missing letters",
+  "spelling-beginning-sound": "Beginning sounds",
+  "spelling-word-ending": "Word endings",
+  "spelling-letter-count": "Letter counting",
+  "spelling-vowel-sound": "Vowel sounds",
+  "spelling-unscramble": "Unscramble words",
+  "math-add-subtract": "Addition & subtraction",
+  "math-missing-number": "Missing-number sums",
+  "math-two-step": "Two-step maths",
+  "math-multiplication": "Multiplication facts"
+};
+
+const SKILL_RECOMMENDATIONS: Record<SkillArea, string> = {
+  "spelling-missing-letter": "Practise filling in one missing letter in familiar words.",
+  "spelling-beginning-sound": "Say the first sound aloud before choosing the starting letter.",
+  "spelling-word-ending": "Work on common endings and chunks such as -er, -tion, or -ing.",
+  "spelling-letter-count": "Count letters slowly while pointing to each one.",
+  "spelling-vowel-sound": "Revisit short and long vowel sounds in simple word families.",
+  "spelling-unscramble": "Build and rebuild words with letter cards to spot patterns faster.",
+  "math-add-subtract": "Use number bonds and quick mental checks for single-step sums.",
+  "math-missing-number": "Practise fact families like 3 + ? = 8 and 8 - 3 = ?.",
+  "math-two-step": "Solve one step at a time and say the plan out loud first.",
+  "math-multiplication": "Review times tables in small sets before mixing them together."
+};
+
+const bumpSkillProgress = (stats: BattleStats, skillArea: SkillArea, wasCorrect: boolean): BattleStats => ({
+  ...stats,
+  skillProgress: {
+    ...stats.skillProgress,
+    [skillArea]: {
+      attempts: stats.skillProgress[skillArea].attempts + 1,
+      correct: stats.skillProgress[skillArea].correct + (wasCorrect ? 1 : 0)
+    }
+  }
+});
+
+const buildDiagnosticRows = (stats: BattleStats) => Object.entries(stats.skillProgress)
+  .filter(([, value]) => value.attempts > 0)
+  .map(([skillArea, value]) => ({
+    key: skillArea as SkillArea,
+    label: SKILL_LABELS[skillArea as SkillArea],
+    attempts: value.attempts,
+    correct: value.correct,
+    accuracy: Math.round((value.correct / value.attempts) * 100)
+  }))
+  .sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts);
+
 const getInitialState = () => {
   const initialSettings = loadParentSettings();
   const preferredMode = loadPreferredMode();
+  const preferredLevel = loadPreferredLevel();
   const initialMode: DifficultyMode = initialSettings.persistDifficulty && preferredMode ? preferredMode : "spark";
-  const initialBattle = createInitialBattleState(MODE_CONFIGS[initialMode], initialMode);
+  const initialLevel: LearnerLevel = initialSettings.persistDifficulty && preferredLevel ? preferredLevel : "growing";
+  const initialBattle = createInitialBattleState(MODE_CONFIGS[initialMode], initialMode, initialLevel);
   const storedProgress = initialSettings.persistProgress ? loadProgress<BattleState>() : null;
   const validProgress = storedProgress && (storedProgress.mode === "sprout" || storedProgress.mode === "spark" || storedProgress.mode === "comet")
     ? storedProgress
@@ -391,12 +506,19 @@ const getInitialState = () => {
   return {
     settings: initialSettings,
     mode: initialMode,
+    level: initialLevel,
+    ageBand: MODE_TO_AGE[initialMode],
     highScores: loadHighScores(),
     summaries: loadRunSummaries(),
     battle: initialBattle,
     checkpoint: initialBattle,
     resumeRun: validProgress
-      ? { mode: validProgress.mode, battle: validProgress.battle, checkpoint: validProgress.checkpoint }
+      ? {
+          mode: validProgress.mode,
+          level: validProgress.level === "beginner" || validProgress.level === "growing" || validProgress.level === "expert" ? validProgress.level : initialLevel,
+          battle: validProgress.battle,
+          checkpoint: validProgress.checkpoint
+        }
       : null
   };
 };
@@ -406,16 +528,19 @@ export default function Page() {
 
   const [screen, setScreen] = useState<Screen>("title");
   const [mode, setMode] = useState<DifficultyMode>(initial.mode);
+  const [ageBand, setAgeBand] = useState<AgeBand>(initial.ageBand);
+  const [level, setLevel] = useState<LearnerLevel>(initial.level);
   const [settings, setSettings] = useState<ParentSettings>(initial.settings);
   const [highScores, setHighScores] = useState<StoredHighScores>(initial.highScores);
   const [summaries, setSummaries] = useState<RunSummary[]>(initial.summaries);
-  const [resumeRun, setResumeRun] = useState<{ mode: DifficultyMode; battle: BattleState; checkpoint: BattleState | null } | null>(initial.resumeRun);
+  const [resumeRun, setResumeRun] = useState<{ mode: DifficultyMode; level: LearnerLevel; battle: BattleState; checkpoint: BattleState | null } | null>(initial.resumeRun);
 
   const [battle, setBattle] = useState<BattleState>(initial.battle);
   const [checkpoint, setCheckpoint] = useState<BattleState | null>(initial.checkpoint);
   const [attackMode, setAttackMode] = useState<"none" | "hero" | "boss">("none");
   const [damagePop, setDamagePop] = useState<{ target: "boss" | "player"; amount: number } | null>(null);
   const [phaseBanner, setPhaseBanner] = useState<string | null>(null);
+  const [typedAnswer, setTypedAnswer] = useState<string>("");
   const [result, setResult] = useState<"victory" | "game-over" | null>(null);
   const [voiceLine, setVoiceLine] = useState<string>("Pick a mode and begin your bright quiz quest!");
 
@@ -433,12 +558,21 @@ export default function Page() {
   const totalAnswered = battle.stats.correctAnswers + battle.stats.wrongAnswers;
   const accuracy = totalAnswered > 0 ? Math.round((battle.stats.correctAnswers / totalAnswered) * 100) : 0;
   const learningLevel = accuracy >= 85 ? "Super Scholar" : accuracy >= 70 ? "Rising Rocket" : "Brave Learner";
+  const diagnosticRows = useMemo(() => buildDiagnosticRows(battle.stats), [battle.stats]);
+  const strengths = diagnosticRows.filter((row) => row.accuracy >= 80).slice(0, 3);
+  const growthAreas = diagnosticRows.filter((row) => row.accuracy < 70).sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts).slice(0, 3);
+  const recommendedFocus = (growthAreas.length > 0 ? growthAreas : diagnosticRows.slice(-2)).map((row) => ({
+    label: row.label,
+    note: SKILL_RECOMMENDATIONS[row.key]
+  }));
+  const scorecardHeadline = result === "victory" ? "Strong finish." : "Useful practice round.";
 
   useEffect(() => {
     if (settings.persistDifficulty) {
       savePreferredMode(mode);
+      savePreferredLevel(level);
     }
-  }, [mode, settings.persistDifficulty]);
+  }, [mode, level, settings.persistDifficulty]);
 
   useEffect(() => {
     if (attackMode === "none") return;
@@ -470,6 +604,7 @@ export default function Page() {
 
     if (key === "persistDifficulty" && !value) {
       clearPreferredMode();
+      clearPreferredLevel();
     }
     if (key === "persistHighScore" && !value) {
       clearHighScores();
@@ -485,10 +620,10 @@ export default function Page() {
     }
   };
 
-  const persistRunProgress = (nextBattle: BattleState, nextCheckpoint: BattleState | null, nextMode: DifficultyMode) => {
+  const persistRunProgress = (nextBattle: BattleState, nextCheckpoint: BattleState | null, nextMode: DifficultyMode, nextLevel: LearnerLevel) => {
     if (!settings.persistProgress) return;
-    saveProgress<BattleState>({ mode: nextMode, battle: nextBattle, checkpoint: nextCheckpoint, savedAt: currentTimestamp() });
-    setResumeRun({ mode: nextMode, battle: nextBattle, checkpoint: nextCheckpoint });
+    saveProgress<BattleState>({ mode: nextMode, level: nextLevel, battle: nextBattle, checkpoint: nextCheckpoint, savedAt: currentTimestamp() });
+    setResumeRun({ mode: nextMode, level: nextLevel, battle: nextBattle, checkpoint: nextCheckpoint });
   };
 
   const updateHighScore = (finalScore: number, selectedMode: DifficultyMode) => {
@@ -520,29 +655,33 @@ export default function Page() {
   };
 
   const startGame = () => {
-    const freshBattle = createInitialBattleState(config, mode);
-    const freshCheckpoint = createInitialBattleState(config, mode);
+    const freshBattle = createInitialBattleState(config, mode, level);
+    const freshCheckpoint = createInitialBattleState(config, mode, level);
     setBattle(freshBattle);
     setCheckpoint(freshCheckpoint);
     setAttackMode("none");
     setDamagePop(null);
+    setTypedAnswer("");
     setPhaseBanner("Battle Start!");
     setResult(null);
     setScreen("battle");
     if (settings.persistProgress) {
-      persistRunProgress(freshBattle, freshCheckpoint, mode);
+      persistRunProgress(freshBattle, freshCheckpoint, mode, level);
     }
-    speak(`${config.label} mode ready. ${BOSSES[0].name} is entering the arena!`, "start");
+    speak(`${config.label} mode ready for ${LEVEL_TUNING[level].label} learners. ${BOSSES[0].name} is entering the arena!`, "start");
   };
 
   const resumeAdventure = () => {
     if (!resumeRun) return;
     setMode(resumeRun.mode);
+    setAgeBand(MODE_TO_AGE[resumeRun.mode]);
+    setLevel(resumeRun.level);
     setBattle(resumeRun.battle);
     setCheckpoint(resumeRun.checkpoint);
     setResult(null);
     setScreen("battle");
     setPhaseBanner("Adventure Resumed");
+    setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
     speak("Welcome back. Resuming your last adventure.", "start");
@@ -554,10 +693,11 @@ export default function Page() {
     setResult(null);
     setScreen("battle");
     setPhaseBanner("Retry Boss");
+    setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
     if (settings.persistProgress) {
-      persistRunProgress(checkpoint, checkpoint, mode);
+      persistRunProgress(checkpoint, checkpoint, mode, level);
     }
     speak("Checkpoint loaded. Try that boss again!", "start");
   };
@@ -597,16 +737,17 @@ export default function Page() {
     }
 
     const nextStats: BattleStats = { ...battle.stats };
-    const nextBattle = createBossCheckpoint(nextIndex, mode, battle.playerHp, nextStats);
+    const nextBattle = createBossCheckpoint(nextIndex, mode, level, battle.playerHp, nextStats);
     const nextCheckpoint = nextBattle;
 
     setBattle(nextBattle);
     setCheckpoint(nextCheckpoint);
     setAttackMode("none");
     setDamagePop(null);
+    setTypedAnswer("");
     setPhaseBanner(`${next.name} Enters!`);
     if (settings.persistProgress) {
-      persistRunProgress(nextBattle, nextCheckpoint, mode);
+      persistRunProgress(nextBattle, nextCheckpoint, mode, level);
     }
     speak(`${next.name} is now on stage. Keep your streak alive!`, "start");
   };
@@ -614,8 +755,11 @@ export default function Page() {
   const answer = (choice: string) => {
     if (screen !== "battle" || battle.phase !== "quiz") return;
 
-    const isCorrect = choice === battle.question.correct;
+    const submitted = normalizeAnswer(battle.question, choice);
+    const correct = normalizeAnswer(battle.question, battle.question.correct);
+    const isCorrect = submitted === correct;
     const nextRound = battle.round + 1;
+    setTypedAnswer("");
 
     if (isCorrect) {
       const newBossHp = Math.max(0, battle.bossHp - config.correctDamage);
@@ -631,7 +775,7 @@ export default function Page() {
           phase: "boss-defeated",
           lastHit: "boss",
           stats: {
-            ...battle.stats,
+            ...bumpSkillProgress(battle.stats, battle.question.skillArea, true),
             correctAnswers: battle.stats.correctAnswers + 1,
             spellingCorrect: battle.stats.spellingCorrect + (battle.question.typeLabel === "Spelling" ? 1 : 0),
             mathsCorrect: battle.stats.mathsCorrect + (battle.question.typeLabel === "Maths" ? 1 : 0),
@@ -643,7 +787,7 @@ export default function Page() {
         setBattle(defeatedBattle);
         setPhaseBanner("Boss Defeated!");
         if (settings.persistProgress) {
-          persistRunProgress(defeatedBattle, checkpoint, mode);
+          persistRunProgress(defeatedBattle, checkpoint, mode, level);
         }
         speak(`${currentBoss.name} has been defeated. Brilliant work!`, "bossDown");
         return;
@@ -653,11 +797,11 @@ export default function Page() {
         ...battle,
         bossHp: newBossHp,
         round: nextRound,
-        question: createQuestion(currentBoss, nextRound, config, mode),
+        question: createQuestion(currentBoss, nextRound, config, mode, level),
         feedback: buildCorrectFeedback(currentBoss, battle.question, newBossHp, config),
         lastHit: "boss",
         stats: {
-          ...battle.stats,
+          ...bumpSkillProgress(battle.stats, battle.question.skillArea, true),
           correctAnswers: battle.stats.correctAnswers + 1,
           spellingCorrect: battle.stats.spellingCorrect + (battle.question.typeLabel === "Spelling" ? 1 : 0),
           mathsCorrect: battle.stats.mathsCorrect + (battle.question.typeLabel === "Maths" ? 1 : 0),
@@ -667,7 +811,7 @@ export default function Page() {
       };
       setBattle(nextBattle);
       if (settings.persistProgress) {
-        persistRunProgress(nextBattle, checkpoint, mode);
+        persistRunProgress(nextBattle, checkpoint, mode, level);
       }
       speak("Correct answer. Spark strike launched!", "correct");
       return;
@@ -684,7 +828,7 @@ export default function Page() {
         feedback: buildWrongFeedback(currentBoss, battle.question),
         lastHit: "player",
         stats: {
-          ...battle.stats,
+          ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
           wrongAnswers: battle.stats.wrongAnswers + 1,
           streak: 0
         }
@@ -698,18 +842,18 @@ export default function Page() {
       ...battle,
       playerHp: newPlayerHp,
       round: nextRound,
-      question: createQuestion(currentBoss, nextRound, config, mode),
+      question: createQuestion(currentBoss, nextRound, config, mode, level),
       feedback: buildWrongFeedback(currentBoss, battle.question),
       lastHit: "player",
       stats: {
-        ...battle.stats,
+        ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
         wrongAnswers: battle.stats.wrongAnswers + 1,
         streak: 0
       }
     };
     setBattle(nextBattle);
     if (settings.persistProgress) {
-      persistRunProgress(nextBattle, checkpoint, mode);
+      persistRunProgress(nextBattle, checkpoint, mode, level);
     }
     speak("Almost there. Try the next one!", "wrong");
   };
@@ -719,8 +863,8 @@ export default function Page() {
       <section className="card title-card">
         <div className="title-hero">
           <span className="title-kicker">✨ Kid Quest Arena ✨</span>
-          <h1>Marmalade: Quiz Boss Battle</h1>
-          <p>Bright battle arena with illustrated heroes, voice cues, and age-based challenge modes.</p>
+          <h1>Marmalade: Bad Guy Quiz Showdown</h1>
+          <p>Bright battle arena with illustrated heroes, voice cues, and kid-friendly bad-guy adventures.</p>
           <div className="title-badges" aria-hidden>
             <span>🎨 Storybook Art</span>
             <span>🧠 Spelling + Maths</span>
@@ -736,6 +880,45 @@ export default function Page() {
 
       {screen === "title" && (
         <section className="card center-stack">
+          <div className="settings-card">
+            <strong>Learning Setup</strong>
+            <div className="settings-grid">
+              <label>
+                Age band
+                <select
+                  value={ageBand}
+                  onChange={(e) => {
+                    const nextAge = e.target.value as AgeBand;
+                    const nextMode = AGE_TO_MODE[nextAge];
+                    setAgeBand(nextAge);
+                    setMode(nextMode);
+                    speak(`${MODE_CONFIGS[nextMode].label} challenge tuned for this age band.`, "start");
+                  }}
+                >
+                  <option value="ages-4-6">Ages 4-6</option>
+                  <option value="ages-7-9">Ages 7-9</option>
+                  <option value="ages-10-plus">Ages 10+</option>
+                </select>
+              </label>
+              <label>
+                Learning level
+                <select
+                  value={level}
+                  onChange={(e) => {
+                    const nextLevel = e.target.value as LearnerLevel;
+                    setLevel(nextLevel);
+                    speak(`${LEVEL_TUNING[nextLevel].label} level selected. ${LEVEL_TUNING[nextLevel].blurb}.`, "start");
+                  }}
+                >
+                  <option value="beginner">Beginner</option>
+                  <option value="growing">Growing</option>
+                  <option value="expert">Expert</option>
+                </select>
+              </label>
+            </div>
+            <small>{LEVEL_TUNING[level].blurb}</small>
+          </div>
+
           <div className="mode-grid">
             {(Object.keys(MODE_CONFIGS) as DifficultyMode[]).map((m) => {
               const modeConfig = MODE_CONFIGS[m];
@@ -746,6 +929,7 @@ export default function Page() {
                   className={`mode-btn ${mode === m ? "selected" : ""}`}
                   onClick={() => {
                     setMode(m);
+                    setAgeBand(MODE_TO_AGE[m]);
                     speak(`${modeConfig.label} mode selected. ${modeConfig.subtitle}`, "start");
                   }}
                 >
@@ -758,6 +942,7 @@ export default function Page() {
             })}
           </div>
 
+
           <div className="settings-card">
             <strong>Parent Settings</strong>
             <div className="settings-grid">
@@ -769,7 +954,7 @@ export default function Page() {
           </div>
 
           {resumeRun && settings.persistProgress && (
-            <button className="ghost-btn" onClick={resumeAdventure}>Resume Saved Adventure ({MODE_CONFIGS[resumeRun.mode].label})</button>
+            <button className="ghost-btn" onClick={resumeAdventure}>Resume Saved Adventure ({MODE_CONFIGS[resumeRun.mode].label} · {LEVEL_TUNING[resumeRun.level].label})</button>
           )}
 
           <div className="boss-row">
@@ -833,14 +1018,49 @@ export default function Page() {
           </div>
 
           {battle.phase === "quiz" ? (
-            <div className="quiz-panel">
-              <div className="question-type">{battle.question.typeLabel} Challenge</div>
-              <h3>{battle.question.prompt}</h3>
-              <div className="options-grid">
-                {battle.question.options.map((option) => (
-                  <button key={option} className="answer-btn" onClick={() => answer(option)}>{option}</button>
-                ))}
+            <div className="quiz-panel" role="group" aria-label={`${battle.question.typeLabel} question`}>
+              <div className="question-header">
+                <div className="question-type">{battle.question.typeLabel} Challenge · {battle.question.inputMode === "typed" ? "Type" : "Pick one"}</div>
+                <div className="question-count">Question {battle.round + 1}</div>
               </div>
+              <h3>{battle.question.prompt}</h3>
+              {battle.question.inputMode === "choice" ? (
+                <>
+                  <p className="question-hint" aria-hidden>Tap one big answer button below:</p>
+                  <div className="options-grid">
+                    {battle.question.options.map((option, idx) => (
+                      <button
+                        key={option}
+                        className="answer-btn"
+                        onClick={() => answer(option)}
+                        aria-label={`Answer ${idx + 1}: ${option}`}
+                      >
+                        <span className="answer-index" aria-hidden>{idx + 1}</span>
+                        <span>{option}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <form
+                  className="typed-answer-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!typedAnswer.trim()) return;
+                    answer(typedAnswer);
+                  }}
+                >
+                  <input
+                    className="typed-answer-input"
+                    value={typedAnswer}
+                    onChange={(e) => setTypedAnswer(e.target.value)}
+                    placeholder={battle.question.placeholder ?? "Type your answer"}
+                    aria-label="Type your answer"
+                    autoComplete="off"
+                  />
+                  <button type="submit" className="big-btn">Submit Answer</button>
+                </form>
+              )}
             </div>
           ) : (
             <div className="center-stack">
@@ -854,7 +1074,7 @@ export default function Page() {
       {screen === "summary" && (
         <section className="card center-stack end-card celebration summary-card">
           <h2>{result === "victory" ? "Learning Victory" : "Learning Summary"}</h2>
-          <p>Mode: {config.label} ({config.ageBand})</p>
+          <p>{scorecardHeadline} {config.label} mode · {config.ageBand} · {LEVEL_TUNING[level].label} track.</p>
           <p>Mode high score: {highScores[mode] ?? 0}</p>
           <div className="summary-grid">
             <div><strong>Score</strong><span>{score}</span></div>
@@ -867,6 +1087,51 @@ export default function Page() {
             <div><strong>Best streak</strong><span>{battle.stats.maxStreak}</span></div>
           </div>
           <p className="level-badge">{learningLevel}</p>
+
+          <div className="scorecard-layout">
+            <div className="scorecard-panel">
+              <strong>Strengths</strong>
+              <ul>
+                {strengths.length > 0 ? strengths.map((item) => (
+                  <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
+                )) : <li>Keep playing a few more rounds to identify clear strengths.</li>}
+              </ul>
+            </div>
+
+            <div className="scorecard-panel warn">
+              <strong>Needs more practice</strong>
+              <ul>
+                {growthAreas.length > 0 ? growthAreas.map((item) => (
+                  <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
+                )) : <li>No major weak spots this round. Keep stretching the challenge.</li>}
+              </ul>
+            </div>
+          </div>
+
+          <div className="scorecard-panel full-width">
+            <strong>Recommended next focus for teacher/parent</strong>
+            <ul>
+              {recommendedFocus.map((item) => (
+                <li key={item.label}><strong>{item.label}:</strong> {item.note}</li>
+              ))}
+            </ul>
+          </div>
+
+          {diagnosticRows.length > 0 && (
+            <div className="scorecard-panel full-width">
+              <strong>Skill breakdown</strong>
+              <div className="diagnostic-table">
+                {diagnosticRows.map((row) => (
+                  <div key={row.key} className="diagnostic-row">
+                    <span>{row.label}</span>
+                    <span>{row.correct}/{row.attempts} correct</span>
+                    <span>{row.accuracy}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="summary-actions">
             <button className="big-btn" onClick={startGame}>Replay Same Mode</button>
             {result === "game-over" && checkpoint && <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Last Boss</button>}

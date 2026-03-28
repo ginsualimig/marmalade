@@ -7,15 +7,15 @@ export type BossData = {
 
 export const BOSS_DEFINITIONS: BossData[] = [
   {
-    name: "Charlotte",
+    name: "Queen Mischief Charlotte",
     maxHP: 140,
     color: 0xffb3de,
-    description: "Dash charges, toy throws, jump slams, shield phase under 40%."
+    description: "Toy dash charges, toy throws, jump slams, shield phase under 40%."
   },
   {
-    name: "George",
+    name: "Captain Chaos George",
     maxHP: 180,
     color: 0x77d6ff,
-    description: "Tantrum spin, diagonal charges, drool puddles, meltdown under 40%."
+    description: "Chaos spins, diagonal charges, goo puddles, meltdown under 40%."
   }
 ];
