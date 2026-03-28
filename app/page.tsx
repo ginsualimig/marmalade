@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  DEFAULT_PARENT_SETTINGS,
   clearHighScores,
   clearPreferredMode,
   clearProgress,
