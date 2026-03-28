@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   clearHighScores,
   clearPreferredLevel,
@@ -27,7 +27,11 @@ import {
   type RunSummary,
   type StoredHighScores
 } from "@/lib/game/quizPersistence";
-import { MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS } from "@/lib/game/curriculum";
+import {
+  MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS,
+  MODE_CURRICULUM_CLUSTERS,
+  STAGE_CURRICULUM
+} from "@/lib/game/curriculum";
 
 type Boss = {
   id: "charlotte" | "george";
@@ -87,6 +91,7 @@ type SkillProgress = {
 type BattleStats = {
   correctAnswers: number;
   wrongAnswers: number;
+  timeoutAnswers: number;
   spellingCorrect: number;
   mathsCorrect: number;
   bossesDefeated: number;
@@ -110,28 +115,28 @@ type BattleState = {
 const BOSSES: Boss[] = [
   {
     id: "charlotte",
-    name: "Queen Mischief Charlotte",
+    name: "Moonlight Manticore Lyra",
     avatarClass: "avatar-charlotte",
     colorClass: "boss-charlotte",
-    subtitle: "Trouble-Making Toy Dragon Who Loves Tricky Quizzes",
+    subtitle: "Sparkly Sky Manticore with Riddle Magic",
     taunts: {
-      intro: "Hee-hee! My puzzle tricks will tangle your brain!",
-      hit: "No fair! You spotted my sneaky trick!",
-      attack: "Toy tornado attack! Quick, use your maths power!",
-      defeated: "My mischief meter is empty... you outsmarted me!"
+      intro: "Twinkle-twist! My moon riddles will spin your brain!",
+      hit: "Oh stars! You cracked my moon riddle!",
+      attack: "Stardust spiral attack! Quick, use your maths power!",
+      defeated: "My moon magic is fading... you outsmarted me!"
     }
   },
   {
     id: "george",
-    name: "Captain Chaos George",
+    name: "Starwhirl Kraken Orion",
     avatarClass: "avatar-george",
     colorClass: "boss-george",
-    subtitle: "Silly Dino Prankster of Number Mayhem",
+    subtitle: "Gentle Sea Kraken Who Swirls Number Storms",
     taunts: {
-      intro: "Rawr-ha-ha! Time for chaotic number pranks!",
-      hit: "Yikes! That answer clobbered my prank plan!",
-      attack: "Chaos bounce bash incoming!",
-      defeated: "You win, hero. My chaos day is officially over!"
+      intro: "Splashy swirl! Time for tidal number magic!",
+      hit: "Whoa! That answer calmed my wild tide!",
+      attack: "Kraken whirl bash incoming!",
+      defeated: "You win, hero. My sea storm is officially over!"
     }
   }
 ];
@@ -142,6 +147,8 @@ const MODE_DECOR: Record<DifficultyMode, { icon: string; badge: string }> = {
   spark: { icon: "⚡", badge: "Balanced Quest" },
   comet: { icon: "☄️", badge: "Big Brain Mode" }
 };
+
+const QUESTION_TIME_LIMIT = 60;
 
 type AgeBand = "ages-4-6" | "ages-7-9" | "ages-10-plus";
 
@@ -360,7 +367,17 @@ const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
   "math-multiplication": { attempts: 0, correct: 0 }
 });
 
-const initialStats = (): BattleStats => ({ correctAnswers: 0, wrongAnswers: 0, spellingCorrect: 0, mathsCorrect: 0, bossesDefeated: 0, streak: 0, maxStreak: 0, skillProgress: createInitialSkillProgress() });
+const initialStats = (): BattleStats => ({
+  correctAnswers: 0,
+  wrongAnswers: 0,
+  timeoutAnswers: 0,
+  spellingCorrect: 0,
+  mathsCorrect: 0,
+  bossesDefeated: 0,
+  streak: 0,
+  maxStreak: 0,
+  skillProgress: createInitialSkillProgress()
+});
 const createInitialBattleState = (config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): BattleState => ({
   bossIndex: 0,
   bossHp: config.bossMaxHp,
@@ -491,6 +508,17 @@ const buildDiagnosticRows = (stats: BattleStats) => Object.entries(stats.skillPr
   }))
   .sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts);
 
+const STAGE_BY_LEVEL_INDEX: Record<LearnerLevel, number> = {
+  beginner: 0,
+  growing: 1,
+  expert: 2
+};
+
+const getSelectedStageId = (mode: DifficultyMode, level: LearnerLevel) => {
+  const stages = MODE_CURRICULUM_CLUSTERS[mode].stages;
+  return stages[Math.min(STAGE_BY_LEVEL_INDEX[level], stages.length - 1)];
+};
+
 const getInitialState = () => {
   const initialSettings = loadParentSettings();
   const preferredMode = loadPreferredMode();
@@ -543,6 +571,9 @@ export default function Page() {
   const [typedAnswer, setTypedAnswer] = useState<string>("");
   const [result, setResult] = useState<"victory" | "game-over" | null>(null);
   const [voiceLine, setVoiceLine] = useState<string>("Pick a mode and begin your bright quiz quest!");
+  const handledTimeoutKeyRef = useRef<string | null>(null);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(QUESTION_TIME_LIMIT);
+  const [timeoutFlash, setTimeoutFlash] = useState<boolean>(false);
 
   const config = MODE_CONFIGS[mode];
   const currentBoss = BOSSES[battle.bossIndex];
@@ -557,15 +588,51 @@ export default function Page() {
 
   const totalAnswered = battle.stats.correctAnswers + battle.stats.wrongAnswers;
   const accuracy = totalAnswered > 0 ? Math.round((battle.stats.correctAnswers / totalAnswered) * 100) : 0;
+  const timeoutAnswers = battle.stats.timeoutAnswers ?? 0;
+  const timeoutRate = totalAnswered > 0 ? Math.round((timeoutAnswers / totalAnswered) * 100) : 0;
   const learningLevel = accuracy >= 85 ? "Super Scholar" : accuracy >= 70 ? "Rising Rocket" : "Brave Learner";
   const diagnosticRows = useMemo(() => buildDiagnosticRows(battle.stats), [battle.stats]);
   const strengths = diagnosticRows.filter((row) => row.accuracy >= 80).slice(0, 3);
   const growthAreas = diagnosticRows.filter((row) => row.accuracy < 70).sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts).slice(0, 3);
+  const selectedStageId = getSelectedStageId(mode, level);
+  const selectedStage = STAGE_CURRICULUM[selectedStageId];
+  const stageInterpretation =
+    totalAnswered === 0
+      ? `This round was too short to judge ${selectedStage.label} expectations yet.`
+      : accuracy >= 85 && timeoutRate <= 10
+        ? `Comfortable for ${selectedStage.label}: this learner is mostly secure with the selected-stage demands.`
+        : accuracy >= 70 && timeoutRate <= 20
+          ? `Near ${selectedStage.label} expectations: mostly coping, but a few ideas still need rehearsal.`
+          : timeoutRate >= 30
+            ? `Below ${selectedStage.label} pace right now: timing pressure is interrupting recall, so confidence and fluency need rebuilding.`
+            : `Below ${selectedStage.label} expectations in this round: accuracy suggests the current mix is still shaky.`;
   const recommendedFocus = (growthAreas.length > 0 ? growthAreas : diagnosticRows.slice(-2)).map((row) => ({
     label: row.label,
     note: SKILL_RECOMMENDATIONS[row.key]
   }));
   const scorecardHeadline = result === "victory" ? "Strong finish." : "Useful practice round.";
+  const timeoutSignal =
+    timeoutAnswers === 0
+      ? "No timeout signal this round — pace was manageable."
+      : timeoutRate >= 30
+        ? `Strong timeout signal: ${timeoutAnswers} questions timed out (${timeoutRate}%). Slow recall is part of the learning picture, not just correctness.`
+        : `Some hesitation showed up: ${timeoutAnswers} timed-out question${timeoutAnswers === 1 ? "" : "s"} (${timeoutRate}%). Fluency practice should stay short and repeated.`;
+  const parentSummary = strengths.length > 0
+    ? `Best area today: ${strengths[0].label}.`
+    : "No single strength stood out yet.";
+  const practiceNextSteps = [
+    growthAreas[0]
+      ? `Start with ${growthAreas[0].label.toLowerCase()} for 5-8 minutes using easier success-first questions.`
+      : "Keep the same stage and repeat a short mixed review to confirm consistency.",
+    timeoutAnswers > 0
+      ? "Treat timeouts as hesitation, not defiance: allow think-aloud steps, then repeat similar items for fluency."
+      : "Once accuracy stays strong, slightly speed up recall with short daily drills.",
+    `If the learner is frustrated, temporarily step down from ${selectedStage.label} expectations and rebuild with ${selectedStage.questionBands[0]?.label.toLowerCase() ?? "foundational items"}.`
+  ];
+  const questionTimerKey = `${screen}-${battle.phase}-${battle.bossIndex}-${battle.round}-${battle.question.prompt}`;
+  const timerPercent = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_TIME_LIMIT) * 100));
+  const timerUrgent = questionTimeLeft <= 15;
+  const timerCritical = questionTimeLeft <= 7;
 
   useEffect(() => {
     if (settings.persistDifficulty) {
@@ -591,6 +658,27 @@ export default function Page() {
     const t = setTimeout(() => setPhaseBanner(null), 1400);
     return () => clearTimeout(t);
   }, [phaseBanner]);
+
+  useEffect(() => {
+    if (screen !== "battle" || battle.phase !== "quiz") return;
+    if (questionTimeLeft <= 0) return;
+    const ticker = setInterval(() => {
+      setQuestionTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [screen, battle.phase, questionTimeLeft]);
+
+  useEffect(() => {
+    if (!timeoutFlash) return;
+    const t = setTimeout(() => setTimeoutFlash(false), 700);
+    return () => clearTimeout(t);
+  }, [timeoutFlash]);
+
+  const resetQuestionTimer = () => {
+    handledTimeoutKeyRef.current = null;
+    setQuestionTimeLeft(QUESTION_TIME_LIMIT);
+    setTimeoutFlash(false);
+  };
 
   const speak = (line: string, cue: "start" | "correct" | "wrong" | "bossDown" | "victory") => {
     setVoiceLine(line);
@@ -663,6 +751,7 @@ export default function Page() {
     setDamagePop(null);
     setTypedAnswer("");
     setPhaseBanner("Battle Start!");
+    resetQuestionTimer();
     setResult(null);
     setScreen("battle");
     if (settings.persistProgress) {
@@ -684,6 +773,7 @@ export default function Page() {
     setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
+    resetQuestionTimer();
     speak("Welcome back. Resuming your last adventure.", "start");
   };
 
@@ -696,6 +786,7 @@ export default function Page() {
     setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
+    resetQuestionTimer();
     if (settings.persistProgress) {
       persistRunProgress(checkpoint, checkpoint, mode, level);
     }
@@ -746,10 +837,63 @@ export default function Page() {
     setDamagePop(null);
     setTypedAnswer("");
     setPhaseBanner(`${next.name} Enters!`);
+    resetQuestionTimer();
     if (settings.persistProgress) {
       persistRunProgress(nextBattle, nextCheckpoint, mode, level);
     }
     speak(`${next.name} is now on stage. Keep your streak alive!`, "start");
+  };
+
+  const resolveWrongAnswer = (isTimeout: boolean) => {
+    const newPlayerHp = Math.max(0, battle.playerHp - config.wrongDamage);
+    const timeoutFeedback = `${currentBoss.taunts.attack} ⏰ Time out! Correct answer: ${battle.question.correct}.`;
+    setAttackMode("boss");
+    setDamagePop({ target: "player", amount: config.wrongDamage });
+    if (isTimeout) {
+      setQuestionTimeLeft(-1);
+      setTimeoutFlash(true);
+      setPhaseBanner("Time Up!");
+    }
+
+    if (newPlayerHp <= 0) {
+      const defeatedBattle: BattleState = {
+        ...battle,
+        playerHp: 0,
+        feedback: isTimeout ? timeoutFeedback : buildWrongFeedback(currentBoss, battle.question),
+        lastHit: "player",
+        stats: {
+          ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
+          wrongAnswers: battle.stats.wrongAnswers + 1,
+          timeoutAnswers: battle.stats.timeoutAnswers + (isTimeout ? 1 : 0),
+          streak: 0
+        }
+      };
+      setBattle(defeatedBattle);
+      finishRun("game-over", defeatedBattle);
+      return;
+    }
+
+    const nextRound = battle.round + 1;
+    const nextBattle: BattleState = {
+      ...battle,
+      playerHp: newPlayerHp,
+      round: nextRound,
+      question: createQuestion(currentBoss, nextRound, config, mode, level),
+      feedback: isTimeout ? timeoutFeedback : buildWrongFeedback(currentBoss, battle.question),
+      lastHit: "player",
+      stats: {
+        ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
+        wrongAnswers: battle.stats.wrongAnswers + 1,
+        timeoutAnswers: battle.stats.timeoutAnswers + (isTimeout ? 1 : 0),
+        streak: 0
+      }
+    };
+    resetQuestionTimer();
+    setBattle(nextBattle);
+    if (settings.persistProgress) {
+      persistRunProgress(nextBattle, checkpoint, mode, level);
+    }
+    speak(isTimeout ? "Time ran out. The boss lands a timeout hit!" : "Almost there. Try the next one!", "wrong");
   };
 
   const answer = (choice: string) => {
@@ -765,6 +909,7 @@ export default function Page() {
       const newBossHp = Math.max(0, battle.bossHp - config.correctDamage);
       setAttackMode("hero");
       setDamagePop({ target: "boss", amount: config.correctDamage });
+      setPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
 
       if (newBossHp <= 0) {
         const defeatedBattle: BattleState = {
@@ -809,6 +954,7 @@ export default function Page() {
           maxStreak: Math.max(battle.stats.maxStreak, battle.stats.streak + 1)
         }
       };
+      resetQuestionTimer();
       setBattle(nextBattle);
       if (settings.persistProgress) {
         persistRunProgress(nextBattle, checkpoint, mode, level);
@@ -817,54 +963,28 @@ export default function Page() {
       return;
     }
 
-    const newPlayerHp = Math.max(0, battle.playerHp - config.wrongDamage);
-    setAttackMode("boss");
-    setDamagePop({ target: "player", amount: config.wrongDamage });
-
-    if (newPlayerHp <= 0) {
-      const defeatedBattle: BattleState = {
-        ...battle,
-        playerHp: 0,
-        feedback: buildWrongFeedback(currentBoss, battle.question),
-        lastHit: "player",
-        stats: {
-          ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
-          wrongAnswers: battle.stats.wrongAnswers + 1,
-          streak: 0
-        }
-      };
-      setBattle(defeatedBattle);
-      finishRun("game-over", defeatedBattle);
-      return;
-    }
-
-    const nextBattle: BattleState = {
-      ...battle,
-      playerHp: newPlayerHp,
-      round: nextRound,
-      question: createQuestion(currentBoss, nextRound, config, mode, level),
-      feedback: buildWrongFeedback(currentBoss, battle.question),
-      lastHit: "player",
-      stats: {
-        ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
-        wrongAnswers: battle.stats.wrongAnswers + 1,
-        streak: 0
-      }
-    };
-    setBattle(nextBattle);
-    if (settings.persistProgress) {
-      persistRunProgress(nextBattle, checkpoint, mode, level);
-    }
-    speak("Almost there. Try the next one!", "wrong");
+    resolveWrongAnswer(false);
   };
+
+  useEffect(() => {
+    if (screen !== "battle" || battle.phase !== "quiz") return;
+    if (questionTimeLeft > 0) return;
+    if (handledTimeoutKeyRef.current === questionTimerKey) return;
+    handledTimeoutKeyRef.current = questionTimerKey;
+    const timeout = setTimeout(() => {
+      resolveWrongAnswer(true);
+    }, 0);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionTimeLeft, screen, battle.phase, questionTimerKey]);
 
   return (
     <main className="page-wrap">
       <section className="card title-card">
         <div className="title-hero">
           <span className="title-kicker">✨ Kid Quest Arena ✨</span>
-          <h1>Marmalade: Bad Guy Quiz Showdown</h1>
-          <p>Bright battle arena with illustrated heroes, voice cues, and kid-friendly bad-guy adventures.</p>
+          <h1>Marmalade: Mythic Monster Quiz Showdown</h1>
+          <p>Bright battle arena with illustrated heroes, voice cues, and kid-friendly mythic monster adventures.</p>
           <div className="title-badges" aria-hidden>
             <span>🎨 Storybook Art</span>
             <span>🧠 Spelling + Maths</span>
@@ -974,8 +1094,9 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card ${currentBoss.colorClass} ${battle.lastHit === "player" ? "danger-flash" : battle.lastHit === "boss" ? "win-flash" : ""} ${attackMode === "boss" ? "screen-shake" : ""}`}>
+        <section className={`card battle-card ${currentBoss.colorClass} ${battle.lastHit === "player" ? "danger-flash" : battle.lastHit === "boss" ? "win-flash" : ""} ${attackMode === "boss" ? "screen-shake" : ""} ${attackMode === "hero" ? "hero-zoom" : ""} ${timeoutFlash ? "timeout-blast" : ""}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
+          <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
 
           <div className="hud-row">
             <div className="hud-box"><strong>Hero HP {battle.playerHp}/{config.playerMaxHp}</strong><div className="bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div></div>
@@ -1022,6 +1143,13 @@ export default function Page() {
               <div className="question-header">
                 <div className="question-type">{battle.question.typeLabel} Challenge · {battle.question.inputMode === "typed" ? "Type" : "Pick one"}</div>
                 <div className="question-count">Question {battle.round + 1}</div>
+              </div>
+              <div className={`question-timer ${timerUrgent ? "urgent" : ""} ${timerCritical ? "critical" : ""}`} role="timer" aria-live="assertive" aria-label={`Time left: ${Math.max(0, questionTimeLeft)} seconds`}>
+                <div className="timer-top-row">
+                  <strong>⏱️ {Math.max(0, questionTimeLeft)}s</strong>
+                  <span>{timerCritical ? "HURRY!" : timerUrgent ? "Quick answer" : "60-second challenge"}</span>
+                </div>
+                <div className="timer-track"><span style={{ width: `${timerPercent}%` }} /></div>
               </div>
               <h3>{battle.question.prompt}</h3>
               {battle.question.inputMode === "choice" ? (
@@ -1081,12 +1209,22 @@ export default function Page() {
             <div><strong>Accuracy</strong><span>{accuracy}%</span></div>
             <div><strong>Correct</strong><span>{battle.stats.correctAnswers}</span></div>
             <div><strong>Mistakes</strong><span>{battle.stats.wrongAnswers}</span></div>
+            <div><strong>Timeouts</strong><span>{timeoutAnswers}</span></div>
             <div><strong>Spelling wins</strong><span>{battle.stats.spellingCorrect}</span></div>
             <div><strong>Maths wins</strong><span>{battle.stats.mathsCorrect}</span></div>
             <div><strong>Bosses defeated</strong><span>{battle.stats.bossesDefeated}/{BOSSES.length}</span></div>
             <div><strong>Best streak</strong><span>{battle.stats.maxStreak}</span></div>
           </div>
           <p className="level-badge">{learningLevel}</p>
+
+          <div className="scorecard-panel full-width">
+            <strong>Parent / teacher interpretation</strong>
+            <p><strong>Stage lens:</strong> {selectedStage.label} ({selectedStage.ageBand}) · {LEVEL_TUNING[level].label}</p>
+            <p>{stageInterpretation}</p>
+            <p><strong>Why this matters:</strong> {timeoutSignal}</p>
+            <p><strong>What this stage usually targets:</strong> {selectedStage.questionBands.slice(0, 2).map((band) => band.label).join(" · ")}</p>
+            <p><strong>Quick note:</strong> {parentSummary}</p>
+          </div>
 
           <div className="scorecard-layout">
             <div className="scorecard-panel">
@@ -1108,13 +1246,24 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="scorecard-panel full-width">
-            <strong>Recommended next focus for teacher/parent</strong>
-            <ul>
-              {recommendedFocus.map((item) => (
-                <li key={item.label}><strong>{item.label}:</strong> {item.note}</li>
-              ))}
-            </ul>
+          <div className="scorecard-layout">
+            <div className="scorecard-panel full-width">
+              <strong>Recommended next focus for teacher/parent</strong>
+              <ul>
+                {recommendedFocus.map((item) => (
+                  <li key={item.label}><strong>{item.label}:</strong> {item.note}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="scorecard-panel full-width">
+              <strong>What to practise next</strong>
+              <ul>
+                {practiceNextSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           {diagnosticRows.length > 0 && (

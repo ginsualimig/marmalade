@@ -1,11 +1,11 @@
-# Marmalade: Bad Guy Quiz Showdown
+# Marmalade: Mythic Monster Quiz Showdown
 
 A simplified, kid-friendly quiz battler built with Next.js for web/Vercel deployment.
 
 ## Core gameplay
 
 - Start screen with both bosses.
-- Battle Queen Mischief Charlotte first, then Captain Chaos George.
+- Battle Moonlight Manticore Lyra first, then Starwhirl Kraken Orion.
 - Every turn is an educational challenge:
   - **Word skills**: phonics, spelling patterns, vocabulary, and word building.
   - **Maths**: number sense through upper-primary arithmetic/problem-solving.

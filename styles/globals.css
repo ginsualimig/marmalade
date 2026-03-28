@@ -205,7 +205,27 @@ body {
 .answer-btn:hover,
 .ghost-btn:hover { transform: translateY(-2px); }
 
-.battle-card { position: relative; overflow: hidden; transition: transform 0.2s ease; }
+.battle-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.battle-card::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.14), transparent 58%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.battle-card > * {
+  position: relative;
+  z-index: 2;
+}
 
 .phase-banner {
   position: absolute; top: 0.75rem; left: 50%; transform: translateX(-50%);
@@ -220,8 +240,37 @@ body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.92); }
 }
 
-.win-flash { box-shadow: 0 0 0 5px rgba(108, 255, 147, 0.7), 0 14px 35px rgba(25, 7, 54, 0.45); }
-.danger-flash { box-shadow: 0 0 0 5px rgba(255, 109, 123, 0.75), 0 14px 35px rgba(25, 7, 54, 0.45); }
+.impact-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.impact-overlay.hero {
+  background: radial-gradient(circle at 64% 46%, rgba(154, 255, 187, 0.48), transparent 44%);
+  animation: heroImpactPulse 0.55s ease-out;
+}
+
+.impact-overlay.boss {
+  background: radial-gradient(circle at 34% 46%, rgba(255, 109, 123, 0.5), transparent 45%);
+  animation: bossImpactPulse 0.55s ease-out;
+}
+
+.win-flash {
+  box-shadow: 0 0 0 5px rgba(108, 255, 147, 0.7), 0 0 32px rgba(113, 255, 165, 0.48), 0 14px 35px rgba(25, 7, 54, 0.45);
+}
+
+.danger-flash {
+  box-shadow: 0 0 0 5px rgba(255, 109, 123, 0.75), 0 0 34px rgba(255, 118, 128, 0.46), 0 14px 35px rgba(25, 7, 54, 0.45);
+}
+
+.hero-zoom { animation: heroZoom 0.45s ease-out; }
+.timeout-blast {
+  animation: timeoutPulse 0.7s ease;
+  box-shadow: 0 0 0 6px rgba(255, 72, 72, 0.72), 0 0 38px rgba(255, 88, 122, 0.6), 0 14px 35px rgba(25, 7, 54, 0.45);
+}
+
 .screen-shake { animation: screenShake 0.45s linear; }
 
 @keyframes screenShake {
@@ -230,6 +279,30 @@ body {
   40% { transform: translate(5px, -2px); }
   60% { transform: translate(-3px, 2px); }
   80% { transform: translate(4px, -1px); }
+}
+
+@keyframes heroImpactPulse {
+  0% { opacity: 0; transform: scale(0.84); }
+  35% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+
+@keyframes bossImpactPulse {
+  0% { opacity: 0; transform: scale(0.84); }
+  35% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0; transform: scale(1.28); }
+}
+
+@keyframes heroZoom {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.022); }
+  100% { transform: scale(1); }
+}
+
+@keyframes timeoutPulse {
+  0% { transform: scale(1); filter: saturate(1); }
+  30% { transform: scale(1.012); filter: saturate(1.4); }
+  100% { transform: scale(1); filter: saturate(1); }
 }
 
 .hud-row { display: grid; gap: 0.8rem; grid-template-columns: repeat(2, 1fr); }
@@ -263,27 +336,30 @@ body {
 
 .sprite-label { font-weight: 900; color: #fff6cb; }
 
-.hero-attack { animation: heroAttack 0.6s ease; }
+.hero-attack { animation: heroAttack 0.62s cubic-bezier(.2,.8,.2,1); }
 @keyframes heroAttack {
-  0% { transform: translateX(0) scale(1); }
-  35% { transform: translateX(16px) scale(1.08); }
-  100% { transform: translateX(0) scale(1); }
+  0% { transform: translateX(0) scale(1); filter: saturate(1); }
+  28% { transform: translateX(26px) scale(1.12); filter: saturate(1.25); }
+  46% { transform: translateX(12px) scale(1.05); }
+  100% { transform: translateX(0) scale(1); filter: saturate(1); }
 }
 
-.boss-attack { animation: bossAttack 0.6s ease; }
+.boss-attack { animation: bossAttack 0.62s cubic-bezier(.2,.8,.2,1); }
 @keyframes bossAttack {
-  0% { transform: translateX(0) scale(1); }
-  35% { transform: translateX(-14px) scale(1.08); }
-  100% { transform: translateX(0) scale(1); }
+  0% { transform: translateX(0) scale(1); filter: saturate(1); }
+  30% { transform: translateX(-24px) scale(1.13); filter: saturate(1.25); }
+  48% { transform: translateX(-10px) scale(1.05); }
+  100% { transform: translateX(0) scale(1); filter: saturate(1); }
 }
 
 .hero-hurt,
-.boss-hurt { animation: hurtWobble 0.5s linear; }
+.boss-hurt { animation: hurtWobble 0.58s linear; }
 @keyframes hurtWobble {
-  0%, 100% { transform: rotate(0deg); }
-  20% { transform: rotate(-4deg) scale(0.96); }
-  40% { transform: rotate(4deg) scale(0.95); }
-  70% { transform: rotate(-2deg) scale(0.98); }
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  16% { transform: rotate(-7deg) scale(0.92); }
+  33% { transform: rotate(7deg) scale(0.9); }
+  50% { transform: rotate(-5deg) scale(0.95); }
+  70% { transform: rotate(4deg) scale(0.97); }
 }
 
 .projectile-lane { position: relative; min-height: 130px; }
@@ -304,9 +380,10 @@ body {
 }
 
 @keyframes heroShot {
-  0% { transform: translateX(0) scale(0.8); opacity: 0.9; }
-  95% { transform: translateX(130px) scale(1.15); opacity: 1; }
-  100% { transform: translateX(145px) scale(0.85); opacity: 0; }
+  0% { transform: translateX(0) scale(0.65); opacity: 0.9; filter: blur(0px); }
+  35% { transform: translateX(78px) scale(1.35); opacity: 1; }
+  95% { transform: translateX(150px) scale(1.2); opacity: 1; filter: blur(0.2px); }
+  100% { transform: translateX(170px) scale(0.8); opacity: 0; }
 }
 
 .boss-shot {
@@ -316,9 +393,10 @@ body {
 }
 
 @keyframes bossShot {
-  0% { transform: translateX(0) scale(0.8); opacity: 0.9; }
-  95% { transform: translateX(-130px) scale(1.15); opacity: 1; }
-  100% { transform: translateX(-145px) scale(0.85); opacity: 0; }
+  0% { transform: translateX(0) scale(0.65); opacity: 0.9; filter: blur(0px); }
+  35% { transform: translateX(-78px) scale(1.35); opacity: 1; }
+  95% { transform: translateX(-150px) scale(1.2); opacity: 1; filter: blur(0.2px); }
+  100% { transform: translateX(-170px) scale(0.8); opacity: 0; }
 }
 
 .impact-burst {
@@ -335,9 +413,10 @@ body {
 .impact-burst.left { left: 0.2rem; }
 
 @keyframes popBurst {
-  0% { transform: scale(0.4); opacity: 0; }
-  35% { transform: scale(1.25); opacity: 1; }
-  100% { transform: scale(0.7); opacity: 0; }
+  0% { transform: scale(0.35); opacity: 0; }
+  28% { transform: scale(1.5); opacity: 1; }
+  55% { transform: scale(1.1); opacity: 0.9; }
+  100% { transform: scale(1.95); opacity: 0; }
 }
 
 .damage-pop {
@@ -395,6 +474,76 @@ body {
 .question-count {
   background: rgba(255, 244, 172, 0.94);
   color: #3f215a;
+}
+
+.question-timer {
+  margin-top: 0.72rem;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  background: linear-gradient(180deg, rgba(140, 214, 255, 0.24), rgba(34, 26, 94, 0.42));
+  padding: 0.5rem 0.64rem 0.62rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.timer-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.timer-top-row strong {
+  font-size: 1.22rem;
+  color: #ecfbff;
+}
+
+.timer-top-row span {
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff3bf;
+}
+
+.timer-track {
+  margin-top: 0.45rem;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(6, 4, 24, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.timer-track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #81ffca, #69d8ff, #ffd682);
+  transition: width 0.85s linear;
+}
+
+.question-timer.urgent {
+  border-color: rgba(255, 220, 122, 0.7);
+  background: linear-gradient(180deg, rgba(255, 177, 111, 0.24), rgba(57, 17, 72, 0.5));
+}
+
+.question-timer.urgent .timer-top-row strong {
+  color: #fff6c4;
+}
+
+.question-timer.critical {
+  border-color: rgba(255, 112, 112, 0.84);
+  box-shadow: 0 0 0 2px rgba(255, 120, 120, 0.24), 0 0 24px rgba(255, 86, 128, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  animation: timerPanic 0.6s steps(2, end) infinite;
+}
+
+.question-timer.critical .timer-track span {
+  background: linear-gradient(90deg, #ff7a8e, #ffb45b);
+}
+
+@keyframes timerPanic {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
 }
 
 .quiz-panel h3 {

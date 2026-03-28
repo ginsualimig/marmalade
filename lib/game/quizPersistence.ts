@@ -1,3 +1,5 @@
+import type { StageId } from "@/lib/game/curriculum";
+
 export type DifficultyMode = "sprout" | "spark" | "comet";
 export type LearnerLevel = "beginner" | "growing" | "expert";
 
@@ -32,6 +34,7 @@ export type PersistedRun<TBattle> = {
 const SETTINGS_KEY = "marmalade-parent-settings-v1";
 const MODE_KEY = "marmalade-mode-v1";
 const LEVEL_KEY = "marmalade-level-v1";
+const STAGE_KEY = "marmalade-stage-v1";
 const HIGH_SCORE_KEY = "marmalade-high-scores-v1";
 const SUMMARY_KEY = "marmalade-run-summaries-v1";
 const PROGRESS_KEY = "marmalade-progress-v1";
@@ -100,6 +103,24 @@ export const clearPreferredMode = () => {
 export const clearPreferredLevel = () => {
   if (!isBrowser()) return;
   window.localStorage.removeItem(LEVEL_KEY);
+};
+
+export const loadPreferredStage = (): StageId | null => {
+  if (!isBrowser()) return null;
+  const stage = window.localStorage.getItem(STAGE_KEY);
+  return stage === "k1" || stage === "k2" || stage === "p1" || stage === "p2" || stage === "p3" || stage === "p4" || stage === "p5" || stage === "p6"
+    ? stage
+    : null;
+};
+
+export const savePreferredStage = (stage: StageId) => {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(STAGE_KEY, stage);
+};
+
+export const clearPreferredStage = () => {
+  if (!isBrowser()) return;
+  window.localStorage.removeItem(STAGE_KEY);
 };
 
 const sanitizeScore = (value: unknown) => {

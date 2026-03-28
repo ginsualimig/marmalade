@@ -1,8 +1,8 @@
 import "@/styles/globals.css";
 
 export const metadata = {
-  title: "Marmalade: Bad Guy Quiz Showdown",
-  description: "Kid-friendly web game where spelling and maths answers stop Queen Mischief Charlotte and Captain Chaos George."
+  title: "Marmalade: Mythic Monster Quiz Showdown",
+  description: "Kid-friendly web game where spelling and maths answers stop Moonlight Manticore Lyra and Starwhirl Kraken Orion."
 };
 
 export default function RootLayout({

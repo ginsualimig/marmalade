@@ -730,8 +730,8 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     if (!this.currentBoss || this.isTransitioning) return;
     const warningMessage =
       this.currentBossIndex === 0
-        ? "Queen Mischief Charlotte is readying another toy!"
-        : "Captain Chaos George is winding up the next tantrum!";
+        ? "Moonlight Manticore Lyra is summoning moon sparks!"
+        : "Starwhirl Kraken Orion is stirring a sea swirl!";
     this.clearBossPrepSignal();
     this.showBossPrepSignal(warningMessage);
     playAudioCue("warning");
@@ -757,7 +757,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
       this.dashBossTowardPlayer(-360, -50);
-      this.bossPhaseText.setText("Queen Charlotte charges!");
+      this.bossPhaseText.setText("Lyra moon-dashes!");
     } else if (option === 1) {
       this.launchCharlotteToyStorm();
     } else if (option === 2) {
@@ -767,12 +767,12 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     }
 
     if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
-      this.activateShieldPhase("Shield: block the toy throws!");
+      this.activateShieldPhase("Moon shield up! Block the stardust orbs!");
     }
   }
 
   private launchCharlotteToyStorm() {
-    this.bossPhaseText.setText("Toy storm incoming!");
+    this.bossPhaseText.setText("Stardust storm incoming!");
     for (let i = 0; i < 3; i++) {
       this.time.delayedCall(i * 180, () => {
         this.launchProjectile("toy", 120 + i * 20, 0xffd6fb);
@@ -805,7 +805,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const option = Phaser.Math.Between(0, 3);
     if (option === 0) {
       this.launchGeorgeSpin(5);
-      this.bossPhaseText.setText("Captain George spins wildly!");
+      this.bossPhaseText.setText("Orion spins a tidal spiral!");
     } else if (option === 1) {
       this.launchProjectile("diagonal", 160, 0x15ffa0);
     } else if (option === 2) {
@@ -815,13 +815,13 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     }
 
     if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
-      this.activateShieldPhase("Meltdown! Intense tantrum spin");
+      this.activateShieldPhase("Whirlpool surge! Brace for a mega spin!");
       this.launchGeorgeSpin(6);
     }
   }
 
   private launchGeorgeSpin(count: number) {
-    this.bossPhaseText.setText("Spin tantrum!");
+    this.bossPhaseText.setText("Tidal spin burst!");
     const color = 0x4dd0ff;
     for (let i = 0; i < count; i++) {
       this.scheduleManagedCall(i * 140, () => {
@@ -849,7 +849,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private launchGeorgeSpinWave() {
     if (!this.player || this.isTransitioning) return;
-    this.bossPhaseText.setText("Drool wave!");
+    this.bossPhaseText.setText("Sea mist wave!");
     const wave = this.add.rectangle(this.player.x, 600, 260, 16, 0x15ffa0, 0.5);
     this.physics.add.existing(wave, true);
     this.hazardGroup?.add(wave);

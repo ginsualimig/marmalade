@@ -96,7 +96,7 @@ export default function createTitleScene(Phaser: typeof PhaserModule) {
         .setOrigin(0.5);
 
       this.add
-        .text(this.scale.width / 2, this.scale.height - 36, "Queen Mischief Charlotte → Captain Chaos George | Learn letters + math while battling", {
+        .text(this.scale.width / 2, this.scale.height - 36, "Moonlight Manticore Lyra → Starwhirl Kraken Orion | Learn letters + math while battling", {
           fontSize: "16px",
           color: "#fff8"
         })
