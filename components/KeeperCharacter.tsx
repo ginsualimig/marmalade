@@ -40,18 +40,19 @@ export function KeeperCharacter({
     >
       <div className="keeper-floor-glow" />
       <div className="keeper-glow" />
-      <div className="keeper-halo-ring" />
-      <div className="keeper-orbit orb-1" />
-      <div className="keeper-orbit orb-2" />
-      <div className="keeper-orbit orb-3" />
+      <div className="keeper-back-halo" />
+      <div className="keeper-banner left" />
+      <div className="keeper-banner right" />
       <div className="keeper-pedestal" />
 
       <div className="keeper-body">
         <div className="keeper-crown" />
-        <div className="keeper-brow left" />
-        <div className="keeper-brow right" />
-
+        <div className="keeper-collar" />
+        <div className="keeper-shoulder left" />
+        <div className="keeper-shoulder right" />
         <div className="keeper-face">
+          <div className="keeper-brow left" />
+          <div className="keeper-brow right" />
           <div className="keeper-cheek left" />
           <div className="keeper-cheek right" />
           <div className="keeper-eye left">
@@ -62,6 +63,7 @@ export function KeeperCharacter({
           </div>
           <div className="keeper-nose" />
           <div className="keeper-mouth" />
+          <div className="keeper-moustache" />
           <div className="keeper-beard" />
         </div>
 
@@ -71,7 +73,12 @@ export function KeeperCharacter({
         <div className="keeper-sleeve right" />
         <div className="keeper-robe">
           <div className="keeper-robe-trim" />
+          <div className="keeper-belt" />
           <div className="keeper-robe-gem" />
+          <div className="keeper-robe-panel left" />
+          <div className="keeper-robe-panel right" />
+          <div className="keeper-boot left" />
+          <div className="keeper-boot right" />
         </div>
       </div>
     </div>

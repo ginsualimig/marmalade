@@ -36,67 +36,65 @@ export function PlayerCharacter({
     >
       <div className="character-shadow" />
       <div className="character-glow" />
-      <div className="character-spark spark-1" />
-      <div className="character-spark spark-2" />
-      <div className="character-spark spark-3" />
-      <div className="toy-platform" />
-
       <div className="body-wrap">
-        {/* Shoes */}
-        <div className={`shoe left ${outfit.shoes || "sneaker"}`} />
-        <div className={`shoe right ${outfit.shoes || "sneaker"}`} />
-
-        {/* Pants */}
-        <div className={`pants ${outfit.pants || "short"}`} />
-
-        {/* Shirt/Body */}
-        <div className={`shirt ${outfit.shirt || "solid"}`}>
-          <div className="shirt-badge" />
+        <div className="hat-anchor">
+          {outfit.hat && <div className={`hat ${outfit.hat}`} />}
         </div>
 
-        {/* Arms */}
-        <div className="arm left"><div className="hand" /></div>
-        <div className="arm right"><div className="hand" /></div>
-
-        {/* Neck */}
-        <div className="neck" />
-
-        {/* Head */}
         <div className="head">
           <div className="hair" />
           <div className="forelock" />
-          <div className="eyebrow left" />
-          <div className="eyebrow right" />
-
-          {/* Ears */}
           <div className="ear left" />
           <div className="ear right" />
-
-          {/* Eyes */}
-          <div className="eye left">
-            <div className="pupil" />
-            <div className="shine" />
+          <div className="face">
+            <div className="eyebrow left" />
+            <div className="eyebrow right" />
+            <div className="eye left">
+              <div className="pupil" />
+              <div className="shine" />
+            </div>
+            <div className="eye right">
+              <div className="pupil" />
+              <div className="shine" />
+            </div>
+            <div className="nose" />
+            <div className="mouth"><div className="tongue" /></div>
+            <div className="cheek left" />
+            <div className="cheek right" />
           </div>
-          <div className="eye right">
-            <div className="pupil" />
-            <div className="shine" />
-          </div>
-
-          {/* Nose */}
-          <div className="nose" />
-
-          {/* Mouth */}
-          <div className="mouth"><div className="tongue" /></div>
-
-          {/* Cheeks */}
-          <div className="cheek left" />
-          <div className="cheek right" />
         </div>
 
-        {/* Hat */}
-        {outfit.hat && (
-          <div className={`hat ${outfit.hat}`} />
-        )}
+        <div className="neck" />
+
+        <div className="torso">
+          <div className={`shirt ${outfit.shirt || "solid"}`}>
+            <div className="shirt-collar" />
+            <div className="shirt-badge" />
+          </div>
+          <div className={`arm left ${outfit.shirt || "solid"}`}>
+            <div className="sleeve-cap" />
+            <div className="hand" />
+          </div>
+          <div className={`arm right ${outfit.shirt || "solid"}`}>
+            <div className="sleeve-cap" />
+            <div className="hand" />
+          </div>
+        </div>
+
+        <div className={`pants ${outfit.pants || "short"}`}>
+          <div className="waistband" />
+        </div>
+
+        <div className="legs">
+          <div className={`leg left ${outfit.pants || "short"}`}>
+            <div className={`sock ${outfit.shoes || "sneaker"}`} />
+            <div className={`shoe left ${outfit.shoes || "sneaker"}`} />
+          </div>
+          <div className={`leg right ${outfit.pants || "short"}`}>
+            <div className={`sock ${outfit.shoes || "sneaker"}`} />
+            <div className={`shoe right ${outfit.shoes || "sneaker"}`} />
+          </div>
+        </div>
       </div>
     </div>
   );

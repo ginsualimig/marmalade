@@ -212,7 +212,7 @@
 }
 
 .battle-boss-sprite .keeper-sprite {
-  transform: scale(1.08);
+  transform: scale(1);
   transform-origin: center bottom;
 }
 
@@ -221,19 +221,54 @@
   position: static;
   transform: none;
   min-width: 0;
-  margin-top: -0.15rem;
-  padding: 0.32rem 0.8rem;
-  font-size: 0.82rem;
+  margin-top: -0.05rem;
+  padding: 0.3rem 0.78rem;
+  font-size: 0.8rem;
+  background: linear-gradient(180deg, rgba(255,245,216,0.96), rgba(232, 201, 128, 0.96));
+  color: #4a2a13;
+  box-shadow: 0 6px 12px rgba(53, 21, 6, 0.14);
 }
 
 .battle-duel-floor {
   min-height: 0;
   padding: 0.55rem 0.7rem 0.65rem;
   display: grid;
-  grid-template-columns: minmax(130px, 0.9fr) minmax(0, 1.2fr);
-  gap: 0.6rem;
+  grid-template-columns: minmax(142px, 1fr) minmax(0, 1.14fr);
+  gap: 0.7rem;
   align-items: stretch;
-  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  background:
+    radial-gradient(circle at 18% 76%, rgba(122, 208, 255, 0.14), transparent 26%),
+    radial-gradient(circle at 82% 24%, rgba(255, 214, 128, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  position: relative;
+  overflow: hidden;
+}
+
+.battle-duel-floor::before {
+  content: "";
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: 0.35rem;
+  height: 34%;
+  border-radius: 999px 999px 28px 28px;
+  background:
+    radial-gradient(circle at 22% 44%, rgba(108, 221, 255, 0.12), transparent 18%),
+    radial-gradient(circle at 78% 42%, rgba(255, 214, 120, 0.16), transparent 18%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.07);
+  pointer-events: none;
+}
+
+.battle-duel-floor::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0.65rem;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,236,185,0.4), rgba(255,255,255,0));
+  pointer-events: none;
 }
 
 .battle-player-presence,
@@ -244,16 +279,18 @@
 }
 
 .battle-player-presence {
-  padding: 0.6rem 0.55rem;
+  padding: 0.55rem 0.5rem 0.45rem;
   display: grid;
   justify-items: center;
-  align-content: center;
-  gap: 0.35rem;
-  background: linear-gradient(180deg, rgba(107, 223, 255, 0.13), rgba(255,255,255,0.04));
+  align-content: end;
+  gap: 0.28rem;
+  background: linear-gradient(180deg, rgba(107, 223, 255, 0.11), rgba(255,255,255,0.04));
+  position: relative;
+  z-index: 1;
 }
 
 .battle-player-presence .player-character {
-  transform: scale(0.86);
+  transform: scale(0.94);
   transform-origin: center bottom;
 }
 
@@ -474,13 +511,13 @@
   }
 
   .battle-duel-floor {
-    grid-template-columns: 112px minmax(0, 1fr);
+    grid-template-columns: 118px minmax(0, 1fr);
     gap: 0.45rem;
     padding: 0.5rem;
   }
 
   .battle-player-presence .player-character {
-    transform: scale(0.74);
+    transform: scale(0.8);
   }
 
   .battle-question-dock {
@@ -533,20 +570,20 @@
   }
 
   .battle-boss-sprite .keeper-sprite {
-    transform: scale(0.82);
+    transform: scale(0.78);
   }
 
   .battle-duel-floor {
-    grid-template-columns: 94px minmax(0, 1fr);
+    grid-template-columns: 98px minmax(0, 1fr);
     padding: 0.42rem;
   }
 
   .battle-player-presence {
-    padding: 0.45rem 0.35rem;
+    padding: 0.42rem 0.32rem;
   }
 
   .battle-player-presence .player-character {
-    transform: scale(0.62);
+    transform: scale(0.68);
   }
 
   .battle-scene-center {
