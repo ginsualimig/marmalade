@@ -18,5 +18,5 @@ This repository was bootstrapped, coded, and documented exclusively with OpenAI 
 
 - Use keyboard (arrows + Z/X/C) or the on-screen touch controls.
 - The bosses rotate between Charlotte (shield + toys) and George (spin + puddles).
-- Collect floating letters to refill MP, dodge deadly letters, and align numbers to the math gate target.
-- Score more by chaining combos and hitting the math gate close to the target value.
+- Follow the HUD word challenge: collect letter orbs in order to spell the featured word for MP and score boosts while avoiding words that start with the highlighted dodge letter.
+- Pick numbers ≥ the displayed target to keep combos healthy, then line up your score with the math gate equation before you run through it; matching the sum keeps combos rolling, missing it scrapes HP.

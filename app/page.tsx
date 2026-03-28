@@ -36,7 +36,7 @@ export default function Page() {
           <ul className="list-disc list-inside space-y-1">
             <li>Use keyboard or touch buttons for move, jump, slash, slam, and dragon special.</li>
             <li>HP/MP bars show vitality while combo + score track momentum.</li>
-            <li>Educational hazards: dodge letters, grab collection orbs, trigger math gates, compare numbers.</li>
+            <li>Follow the HUD word challenge: snag letter orbs in order while dodging the highlighted letters, then align the math gate prompt to keep combos alive.</li>
             <li>Bosss swap through Charlotte (shield & toys) then George (spin & puddles).</li>
           </ul>
         </article>

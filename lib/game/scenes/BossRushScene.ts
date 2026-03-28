@@ -19,7 +19,9 @@ const WORDS = [
 ];
 
 
-const LETTER_POOL = ["M", "S", "C", "G", "T"];
+const LETTER_POOL = ["A", "C", "D", "E", "G", "H", "L", "M", "N", "O", "P", "R", "S", "T", "W"];
+
+const WORD_COLLECTION_TARGETS = ["MATH", "CODE", "GLOW"];
 
 type AttackStyle = "light" | "heavy" | "dragon";
 
@@ -125,6 +127,13 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private numberComparisonTarget = 4;
   private wordDodgeLetter = "S";
 
+  private wordCollectionTargets = WORD_COLLECTION_TARGETS;
+  private currentWordIndex = 0;
+  private wordProgress = 0;
+  private mathGateEquation = "";
+  private educationalTip?: Phaser.GameObjects.Text;
+  private educationalTipTimer?: Phaser.Time.TimerEvent;
+
   private touchState = { left: false, right: false };
 
   constructor() {
@@ -154,6 +163,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.createBoss();
     this.createUI();
     this.createGroups();
+    this.initWordCollection();
     this.setupInput();
     this.rotateWordLetter();
     this.spawnMathGate();
@@ -780,11 +790,12 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
 
   private handleLetterCollision(playerObj: ArcadePhysicsObject, orbObj: ArcadePhysicsObject) {
     const orb = orbObj as Phaser.GameObjects.Arc;
-    this.playerMP = Math.min(120, this.playerMP + 14);
+    const letter = String(orb.getData("letter") ?? "").toUpperCase();
+    this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 14);
     this.score += 4;
     this.comboCount += 1;
     this.comboText.setText(`Combo x${this.comboCount}`);
-    this.updateEducationalText();
+    this.processLetterForWord(letter);
     orb.destroy();
   }
 
@@ -826,6 +837,7 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
   private spawnMathGate() {
     this.mathGate?.destroy();
     this.mathGateTarget = Phaser.Math.Between(12, 20);
+    this.mathGateEquation = this.createMathEquation(this.mathGateTarget);
     this.mathGate = this.add
       .rectangle(400, 240, 200, 40, 0x8ce5ff, 0.2)
       .setStrokeStyle(2, 0x8ce5ff);
@@ -833,25 +845,31 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     if (this.player) {
       this.physics.add.overlap(this.player, this.mathGate, this.processMathGate, undefined, this);
     }
+    this.showEducationalMessage(`Math gate: ${this.mathGateEquation} = ${this.mathGateTarget}`);
     this.updateEducationalText();
   }
 
   private processMathGate() {
     if (!this.mathGate) return;
     const gap = Math.abs(this.score - this.mathGateTarget);
+    const equation = this.mathGateEquation || `${this.mathGateTarget}`;
     if (gap <= 6) {
       this.score += 18;
       this.comboCount += 1;
       this.displayBreach("Math match! Combo boosted.");
+      this.showEducationalMessage(`Math gate success: ${equation} = ${this.mathGateTarget}`);
     } else {
       this.applyPlayerDamage(5);
       this.comboCount = Math.max(1, Math.floor(this.comboCount / 2));
       this.displayBreach("Math gate rebuffed!");
+      this.showEducationalMessage(`Keep practicing: ${equation} = ${this.mathGateTarget}`);
     }
     this.comboText.setText(`Combo x${Math.max(1, this.comboCount)}`);
     this.scoreText.setText(`Score: ${this.score}`);
     this.mathGate?.destroy();
     this.mathGate = undefined;
+    this.mathGateEquation = "";
+    this.updateEducationalText();
   }
 
   private scheduleEducationalEvents() {
@@ -862,19 +880,102 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.time.addEvent({ delay: 11000, loop: true, callback: this.rotateWordLetter, callbackScope: this });
   }
 
+
+  private initWordCollection() {
+    this.currentWordIndex = 0;
+    this.wordProgress = 0;
+    this.showEducationalMessage(`Spell ${this.getCurrentCollectionWord()} by collecting letters in order.`);
+    this.updateEducationalText();
+  }
+
+  private processLetterForWord(letter: string) {
+    const targetWord = this.getCurrentCollectionWord();
+    const expected = targetWord[this.wordProgress] ?? "";
+    if (letter === expected) {
+      this.wordProgress += 1;
+      this.showEducationalMessage(`Nice! ${letter} is letter ${this.wordProgress}/${targetWord.length} of ${targetWord}.`);
+      if (this.wordProgress >= targetWord.length) {
+        this.completeWordCollection();
+        return;
+      }
+    } else {
+      if (letter === targetWord[0]) {
+        this.wordProgress = 1;
+        this.showEducationalMessage(`${letter} starts ${targetWord}. Keep stacking the letters.`);
+      } else {
+        this.wordProgress = 0;
+        this.showEducationalMessage(`Keep grabbing letters to spell ${targetWord}.`);
+      }
+    }
+    this.updateEducationalText();
+  }
+
+  private completeWordCollection() {
+    const completed = this.getCurrentCollectionWord();
+    this.score += completed.length * 6;
+    this.playerMP = Math.min(PLAYER_MP_MAX, this.playerMP + 18);
+    this.showEducationalMessage(`Word complete! ${completed} bonus: MP + score.`);
+    this.currentWordIndex = (this.currentWordIndex + 1) % this.wordCollectionTargets.length;
+    this.wordProgress = 0;
+    this.updateEducationalText();
+    this.time.delayedCall(900, () => {
+      this.showEducationalMessage(`Next word: ${this.getCurrentCollectionWord()}`);
+    });
+  }
+
+  private getCurrentCollectionWord() {
+    return this.wordCollectionTargets[this.currentWordIndex];
+  }
+
+  private createMathEquation(target: number) {
+    const firstOperand = Phaser.Math.Between(3, Math.max(3, target - 3));
+    const secondOperand = target - firstOperand;
+    return `${firstOperand} + ${secondOperand}`;
+  }
+
+  private showEducationalMessage(message: string) {
+    this.educationalTip?.destroy();
+    this.educationalTipTimer?.remove(false);
+    this.educationalTip = this.add
+      .text(400, 560, message, {
+        fontSize: "14px",
+        color: "#9df",
+        align: "center"
+      })
+      .setOrigin(0.5)
+      .setDepth(5);
+    this.educationalTipTimer = this.time.addEvent({
+      delay: 2200,
+      loop: false,
+      callback: () => {
+        this.educationalTip?.destroy();
+        this.educationalTip = undefined;
+        this.educationalTipTimer = undefined;
+      }
+    });
+  }
+
   private rotateWordLetter() {
     this.wordDodgeLetter = Phaser.Utils.Array.GetRandom(LETTER_POOL);
     this.updateEducationalText();
   }
 
   private updateEducationalText() {
+    const word = this.getCurrentCollectionWord();
+    const nextLetter = word[this.wordProgress] ?? "✔";
+    const mathLine =
+      this.mathGateTarget > 0
+        ? `Math prompt: ${this.mathGateEquation || this.mathGateTarget} = ${this.mathGateTarget}`
+        : "Math gate approaching soon.";
     const textLines = [
-      `Dodge words starting with ${this.wordDodgeLetter}.`,
-      `Collect letters to recharge MP (MP: ${this.playerMP}).`,
+      `Word task: Spell ${word} (${this.wordProgress}/${word.length}) → next: ${nextLetter}`,
+      mathLine,
       `Pick numbers ≥ ${this.numberComparisonTarget}.`,
-      `Math gate target: score ~ ${this.mathGateTarget || "??"}.`
+      `Dodge words starting with ${this.wordDodgeLetter}.`,
+      `MP reserve: ${this.playerMP}/${PLAYER_MP_MAX}.`
     ];
     this.eduText?.setText(textLines.join("\n"));
+
   }
 
   private updateUI() {
