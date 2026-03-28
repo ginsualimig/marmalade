@@ -731,7 +731,9 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     const warningMessage =
       this.currentBossIndex === 0
         ? "Moonlight Manticore Lyra is summoning moon sparks!"
-        : "Starwhirl Kraken Orion is stirring a sea swirl!";
+        : this.currentBossIndex === 1
+        ? "Starwhirl Kraken Orion is stirring a sea swirl!"
+        : "Blaze Phoenix is igniting flame spirals!";
     this.clearBossPrepSignal();
     this.showBossPrepSignal(warningMessage);
     playAudioCue("warning");
@@ -748,8 +750,10 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     if (!this.currentBoss || this.isTransitioning) return;
     if (this.currentBossIndex === 0) {
       this.launchCharlotteMove();
-    } else {
+    } else if (this.currentBossIndex === 1) {
       this.launchGeorgeMove();
+    } else {
+      this.launchPhoenixMove();
     }
   }
 
@@ -865,6 +869,83 @@ export default function createBossRushScene(Phaser: typeof PhaserModule) {
     this.scheduleManagedCall(2500, () => {
       wave.destroy();
     });
+  }
+
+  private launchPhoenixMove() {
+    const option = Phaser.Math.Between(0, 3);
+    if (option === 0) {
+      this.launchPhoenixSpiral();
+      this.bossPhaseText.setText("Phoenix ignites flame spiral!");
+    } else if (option === 1) {
+      this.launchInfernoWave();
+      this.bossPhaseText.setText("Inferno wave incoming!");
+    } else if (option === 2) {
+      this.launchFlameBarrage();
+      this.bossPhaseText.setText("Flame barrage!");
+    } else {
+      this.launchProjectile("diagonal", 180, 0xff6b35);
+      this.bossPhaseText.setText("Phoenix embers!");
+    }
+
+    if (this.bossHP / this.bossMaxHP < 0.45 && !this.bossShield) {
+      this.activateShieldPhase("Nest rebirth! Phoenix rises with flames!");
+      this.launchPhoenixSpiral();
+    }
+  }
+
+  private launchPhoenixSpiral() {
+    this.bossPhaseText.setText("Flame spiral erupting!");
+    const color = 0xff6b35;
+    for (let i = 0; i < 4; i++) {
+      this.scheduleManagedCall(i * 120, () => {
+        if (!this.scene.isActive() || this.isTransitioning) return;
+        const angle = (i / 4) * Math.PI * 2;
+        const projectile = this.add.circle(this.boss.x, this.boss.y, 12, color, 0.95);
+        this.physics.add.existing(projectile);
+        const body = projectile.body as Phaser.Physics.Arcade.Body;
+        body.setVelocity(Math.cos(angle) * 260, Math.sin(angle) * 260);
+        body.setAllowGravity(false);
+        body.setCollideWorldBounds(false);
+        this.hazardGroup?.add(projectile);
+        this.setHazardExpiry(projectile, 1800);
+        this.trimHazardCount();
+        this.tweens.add({
+          targets: projectile,
+          alpha: 0,
+          duration: 1600,
+          ease: "Quad.easeIn",
+          onComplete: () => projectile.destroy()
+        });
+      });
+    }
+  }
+
+  private launchInfernoWave() {
+    if (!this.player || this.isTransitioning) return;
+    const wave = this.add.rectangle(this.player.x, 600, 280, 20, 0xff6b35, 0.6);
+    this.physics.add.existing(wave, true);
+    this.hazardGroup?.add(wave);
+    this.setHazardExpiry(wave, 3000);
+    this.trimHazardCount();
+    this.tweens.add({
+      targets: wave,
+      width: 480,
+      alpha: 0,
+      duration: 800,
+      ease: "Quad.easeOut"
+    });
+    this.scheduleManagedCall(2700, () => {
+      wave.destroy();
+    });
+  }
+
+  private launchFlameBarrage() {
+    this.bossPhaseText.setText("Flame barrage!");
+    for (let i = 0; i < 3; i++) {
+      this.time.delayedCall(i * 200, () => {
+        this.launchProjectile("toy", 140 + i * 15, 0xff6b35);
+      });
+    }
   }
 
   private dashBossTowardPlayer(forceX: number, forceY: number) {

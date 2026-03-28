@@ -1,4 +1,5 @@
 import "@/styles/globals.css";
+import "@/styles/animations.css";
 
 export const metadata = {
   title: "Marmalade: Mythic Monster Quiz Showdown",

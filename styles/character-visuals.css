@@ -1,0 +1,1003 @@
+/* ============================================================================
+   CHARACTER VISUALS — Kid-Friendly Stylized Character Sprites
+   ============================================================================ */
+
+/* ============================================================================
+   PLAYER CHARACTER
+   ============================================================================ */
+
+.player-character {
+  position: relative;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+  transition: transform 0.3s ease;
+}
+
+.player-character.animated {
+  animation: characterPulse 0.6s ease;
+}
+
+@keyframes characterPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Character Glow */
+.player-character .character-glow {
+  position: absolute;
+  inset: -12px;
+  background: radial-gradient(circle, rgba(255, 215, 87, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+
+/* Head Structure */
+.player-character .head {
+  position: absolute;
+  top: 12%;
+  width: 42%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #ffd8ae 0%, #ffb88c 50%, #ff9e80 100%);
+  border-radius: 55% 55% 48% 48%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: inset -2px -4px 8px rgba(0, 0, 0, 0.15),
+              0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Eyes */
+.player-character .eye {
+  position: absolute;
+  width: 6px;
+  height: 7px;
+  background: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.player-character .eye.left {
+  left: 32%;
+  top: 38%;
+}
+
+.player-character .eye.right {
+  right: 32%;
+  top: 38%;
+}
+
+.player-character .eye .pupil {
+  width: 3.5px;
+  height: 4px;
+  background: #1a1232;
+  border-radius: 50%;
+}
+
+.player-character .eye .shine {
+  position: absolute;
+  width: 1.5px;
+  height: 1.5px;
+  background: #fff;
+  border-radius: 50%;
+  top: 1px;
+  left: 1px;
+}
+
+/* Nose */
+.player-character .nose {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #d4956f;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Mouth */
+.player-character .mouth {
+  position: absolute;
+  width: 8px;
+  height: 3px;
+  top: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 0 0 8px 8px;
+  background: #d0705f;
+}
+
+/* Cheeks */
+.player-character .cheek {
+  position: absolute;
+  width: 5px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 179, 140, 0.6);
+  top: 45%;
+}
+
+.player-character .cheek.left {
+  left: 18%;
+}
+
+.player-character .cheek.right {
+  right: 18%;
+}
+
+/* Ears */
+.player-character .ear {
+  position: absolute;
+  width: 6px;
+  height: 8px;
+  background: linear-gradient(90deg, #ffb88c, #ff9e80);
+  border-radius: 50% 50% 50% 40%;
+  top: 8%;
+}
+
+.player-character .ear.left {
+  left: 14%;
+  transform: rotate(-25deg);
+}
+
+.player-character .ear.right {
+  right: 14%;
+  transform: rotate(25deg);
+}
+
+/* Neck */
+.player-character .neck {
+  position: absolute;
+  top: 32%;
+  width: 16%;
+  height: 12%;
+  background: linear-gradient(90deg, #ffd8ae, #ffb88c);
+  border-radius: 50%;
+  z-index: 5;
+}
+
+/* Shirt / Body */
+.player-character .shirt {
+  position: absolute;
+  top: 38%;
+  width: 55%;
+  height: 35%;
+  border-radius: 16% 16% 12% 12%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset -1px -2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.player-character .shirt.solid {
+  background: linear-gradient(135deg, #ff9bde 0%, #c570ff 100%);
+}
+
+.player-character .shirt.stripe {
+  background: linear-gradient(135deg, #ffd357 0%, #ffb857 25%, #ffd357 50%, #ffb857 75%, #ffd357 100%);
+}
+
+.player-character .shirt.flower {
+  background: linear-gradient(135deg, #ffb3d9 0%, #ff8ec7 100%);
+  position: relative;
+}
+
+.player-character .shirt.flower::before {
+  content: "";
+  position: absolute;
+  width: 60%;
+  height: 60%;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 30% 30%, #fff5ba, transparent 50%);
+  border-radius: 50%;
+}
+
+.player-character .shirt.star {
+  background: linear-gradient(135deg, #9df5ff 0%, #56d4ff 100%);
+  position: relative;
+}
+
+.player-character .shirt.star::after {
+  content: "✨";
+  position: absolute;
+  font-size: 150%;
+  opacity: 0.6;
+}
+
+/* Arms */
+.player-character .arm {
+  position: absolute;
+  width: 10%;
+  height: 30%;
+  background: linear-gradient(90deg, #ffd8ae, #ffb88c);
+  border-radius: 50%;
+  top: 42%;
+  z-index: 3;
+}
+
+.player-character .arm.left {
+  left: 12%;
+  transform: rotate(-25deg);
+}
+
+.player-character .arm.right {
+  right: 12%;
+  transform: rotate(25deg);
+}
+
+/* Pants */
+.player-character .pants {
+  position: absolute;
+  top: 70%;
+  width: 50%;
+  height: 20%;
+  border-radius: 12% 12% 8% 8%;
+  z-index: 3;
+  box-shadow: inset -1px -1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.player-character .pants.short {
+  background: linear-gradient(135deg, #6ed3ff, #56a8d4);
+  height: 14%;
+}
+
+.player-character .pants.long {
+  background: linear-gradient(135deg, #2d5f8d, #1a3a5f);
+  height: 22%;
+}
+
+.player-character .pants.denim {
+  background: linear-gradient(135deg, #4a90e2, #2d5fa8);
+  height: 20%;
+}
+
+.player-character .pants.pattern {
+  background: linear-gradient(90deg, #ff8ec7 0%, #ff8ec7 25%, #fff 25%, #fff 50%, #ff8ec7 50%, #ff8ec7 75%, #fff 75%, #fff 100%);
+  background-size: 12px 100%;
+  height: 18%;
+}
+
+/* Shoes */
+.player-character .shoe {
+  position: absolute;
+  bottom: 2%;
+  width: 16%;
+  height: 8%;
+  border-radius: 8% 8% 50% 50%;
+  z-index: 2;
+}
+
+.player-character .shoe.left {
+  left: 18%;
+}
+
+.player-character .shoe.right {
+  right: 18%;
+}
+
+/* Shoe styles */
+.player-character .shoe.sneaker {
+  background: linear-gradient(135deg, #ffffff, #e8e8e8);
+  border: 1px solid #ccc;
+}
+
+.player-character .shoe.sneaker::before {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 40%;
+  bottom: 0;
+  background: linear-gradient(90deg, #ff6b6b, #ff8787);
+  border-radius: 0 0 50% 50%;
+}
+
+.player-character .shoe.boot {
+  background: linear-gradient(135deg, #4a4a4a, #2a2a2a);
+  border: 1px solid #1a1a1a;
+}
+
+.player-character .shoe.slipper {
+  background: linear-gradient(135deg, #ffb3d9, #ff8ec7);
+  border-radius: 8% 8% 30% 30%;
+}
+
+.player-character .shoe.loafer {
+  background: linear-gradient(135deg, #8b6f47, #a0826d);
+  border-radius: 5% 5% 45% 45%;
+}
+
+/* Hat Styles */
+.player-character .hat {
+  position: absolute;
+  top: -8%;
+  width: 48%;
+  height: 22%;
+  z-index: 12;
+}
+
+.player-character .hat.wizard {
+  background: linear-gradient(135deg, #4a3c8f, #2d1f54);
+  clip-path: polygon(50% 0%, 100% 60%, 85% 100%, 50% 75%, 15% 100%, 0% 60%);
+}
+
+.player-character .hat.wizard::before {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffd357;
+  border-radius: 50%;
+  top: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 8px #ffeb3b;
+}
+
+.player-character .hat.crown {
+  background: linear-gradient(135deg, #ffd357, #ffb857);
+  clip-path: polygon(10% 100%, 25% 50%, 35% 70%, 50% 20%, 65% 70%, 75% 50%, 90% 100%);
+}
+
+.player-character .hat.crown::before {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 4px;
+  bottom: 0;
+  background: #b8860b;
+}
+
+.player-character .hat.beanie {
+  background: linear-gradient(135deg, #ff8ec7, #c570ff);
+  border-radius: 50% 50% 35% 35%;
+}
+
+.player-character .hat.beanie::before {
+  content: "";
+  position: absolute;
+  width: 12%;
+  height: 30%;
+  top: -12%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: inherit;
+  border-radius: 50%;
+}
+
+.player-character .hat.bow {
+  background: linear-gradient(135deg, #ffb3d9, #ff8ec7);
+  width: 60%;
+  clip-path: polygon(20% 40%, 0% 30%, 10% 50%, 0% 70%, 20% 60%, 50% 80%, 80% 60%, 100% 70%, 90% 50%, 100% 30%, 80% 40%, 50% 20%);
+}
+
+/* ============================================================================
+   BOSS VISUALS
+   ============================================================================ */
+
+.boss-charlotte,
+.boss-george {
+  position: relative;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.4));
+}
+
+.boss-charlotte.animated,
+.boss-george.animated {
+  animation: bossBounce 0.8s ease infinite;
+}
+
+@keyframes bossBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* ============================================================================
+   CHARLOTTE: SPARKLY MANTICORE LYRA
+   ============================================================================ */
+
+.boss-charlotte .body-core {
+  position: absolute;
+  width: 50%;
+  height: 45%;
+  background: linear-gradient(135deg, #ffd3f4 0%, #ff8ec7 50%, #ff6ba8 100%);
+  border-radius: 50% 50% 45% 45%;
+  box-shadow: inset -3px -4px 12px rgba(0, 0, 0, 0.15),
+              0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.boss-charlotte .head {
+  position: absolute;
+  top: 15%;
+  width: 35%;
+  height: 38%;
+  background: linear-gradient(135deg, #ffd3f4, #ff8ec7);
+  border-radius: 60% 60% 50% 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: inset -2px -3px 8px rgba(0, 0, 0, 0.1);
+}
+
+.boss-charlotte .ear {
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  background: linear-gradient(90deg, #ff8ec7, #ff6ba8);
+  border-radius: 50% 50% 40% 40%;
+  top: -4%;
+  z-index: 11;
+}
+
+.boss-charlotte .ear.left {
+  left: 20%;
+  transform: rotate(-20deg);
+}
+
+.boss-charlotte .ear.right {
+  right: 20%;
+  transform: rotate(20deg);
+}
+
+.boss-charlotte .eye {
+  position: absolute;
+  width: 8px;
+  height: 9px;
+  background: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e0a8d0;
+}
+
+.boss-charlotte .eye.left {
+  left: 30%;
+  top: 38%;
+}
+
+.boss-charlotte .eye.right {
+  right: 30%;
+  top: 38%;
+}
+
+.boss-charlotte .eye .moon {
+  width: 5px;
+  height: 5px;
+  background: #ffd3f4;
+  border-radius: 50%;
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  box-shadow: 0 0 4px #ffe884;
+}
+
+.boss-charlotte .third-eye {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, #ffe884, #ffd357);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 6px #ffe884;
+}
+
+.boss-charlotte .third-eye .iris {
+  width: 3px;
+  height: 3px;
+  background: #49255d;
+  border-radius: 50%;
+}
+
+.boss-charlotte .mouth {
+  position: absolute;
+  width: 6px;
+  height: 2px;
+  top: 60%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #d0705f;
+  border-radius: 2px;
+}
+
+/* Charlotte's Legs */
+.boss-charlotte .leg {
+  position: absolute;
+  width: 10%;
+  height: 28%;
+  background: linear-gradient(90deg, #ffd3f4, #ff8ec7);
+  border-radius: 50%;
+  bottom: -8%;
+}
+
+.boss-charlotte .leg.front-left {
+  left: 24%;
+}
+
+.boss-charlotte .leg.front-right {
+  right: 24%;
+}
+
+.boss-charlotte .leg.back-left {
+  left: 12%;
+  opacity: 0.7;
+}
+
+.boss-charlotte .leg.back-right {
+  right: 12%;
+  opacity: 0.7;
+}
+
+/* Charlotte's Tail */
+.boss-charlotte .tail {
+  position: absolute;
+  bottom: 8%;
+  right: -12%;
+  width: 45%;
+  height: 24%;
+  display: flex;
+  gap: 2px;
+  animation: tailSwirl 3s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes tailSwirl {
+  0%, 100% { transform: rotate(15deg); }
+  50% { transform: rotate(-15deg); }
+}
+
+.boss-charlotte .tail-segment {
+  flex: 1;
+  background: linear-gradient(135deg, #ff8ec7, #c570ff);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 142, 199, 0.5);
+}
+
+.boss-charlotte .tail-segment.s1 {
+  transform: rotate(-25deg);
+}
+
+.boss-charlotte .tail-segment.s2 {
+  transform: rotate(0deg);
+}
+
+.boss-charlotte .tail-segment.s3 {
+  transform: rotate(25deg);
+}
+
+.boss-charlotte .sparkle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #ffe884;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #ffeb3b;
+  animation: sparkleFloat 2s ease-in-out infinite;
+}
+
+.boss-charlotte .sparkle.sp1 {
+  top: 10%;
+  right: 15%;
+  animation-delay: 0s;
+}
+
+.boss-charlotte .sparkle.sp2 {
+  bottom: 20%;
+  right: 8%;
+  animation-delay: 1s;
+}
+
+@keyframes sparkleFloat {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-8px); }
+}
+
+/* Charlotte Mane (fluffy sides) */
+.boss-charlotte .mane-left,
+.boss-charlotte .mane-right {
+  position: absolute;
+  width: 20%;
+  height: 32%;
+  background: linear-gradient(90deg, rgba(255, 142, 199, 0.4), rgba(255, 107, 168, 0.3));
+  border-radius: 50%;
+  top: 28%;
+}
+
+.boss-charlotte .mane-left {
+  left: 0%;
+  animation: maneSway 2.5s ease-in-out infinite;
+}
+
+.boss-charlotte .mane-right {
+  right: 0%;
+  animation: maneSway 2.5s ease-in-out infinite 0.3s;
+}
+
+@keyframes maneSway {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50% { transform: scaleX(1.2); opacity: 0.8; }
+}
+
+/* Floating sparkles around Charlotte */
+.boss-charlotte .sparkle-float {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #ffe884;
+  border-radius: 50%;
+  box-shadow: 0 0 3px #ffeb3b;
+  animation: particleFloat 4s ease-in-out infinite;
+}
+
+.boss-charlotte .sparkle-float.s1 {
+  top: 10%;
+  left: 15%;
+  animation-delay: 0s;
+}
+
+.boss-charlotte .sparkle-float.s2 {
+  top: 25%;
+  right: 10%;
+  animation-delay: 1.3s;
+}
+
+.boss-charlotte .sparkle-float.s3 {
+  bottom: 15%;
+  left: 20%;
+  animation-delay: 2.6s;
+}
+
+@keyframes particleFloat {
+  0% { opacity: 0; transform: translate(0, 0); }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 12px), var(--ty, -12px)); }
+}
+
+/* ============================================================================
+   GEORGE: STARWHIRL KRAKEN ORION
+   ============================================================================ */
+
+.boss-george .body-core {
+  position: absolute;
+  width: 52%;
+  height: 48%;
+  background: radial-gradient(ellipse at 50% 40%, #bfffd8 0%, #6ed3ff 50%, #4ab0d1 100%);
+  border-radius: 50%;
+  box-shadow: inset -4px -6px 14px rgba(0, 0, 0, 0.12),
+              0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.boss-george .head {
+  position: absolute;
+  top: 12%;
+  width: 40%;
+  height: 42%;
+  background: linear-gradient(135deg, #bfffd8 0%, #8dffb8 50%, #6ed3ff 100%);
+  border-radius: 55% 55% 50% 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: inset -2px -3px 8px rgba(0, 0, 0, 0.08);
+}
+
+.boss-george .eye {
+  position: absolute;
+  width: 10px;
+  height: 11px;
+  background: #fff;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid #a8e0d4;
+}
+
+.boss-george .eye.left {
+  left: 28%;
+  top: 36%;
+}
+
+.boss-george .eye.right {
+  right: 28%;
+  top: 36%;
+}
+
+.boss-george .eye .pupil {
+  width: 5px;
+  height: 6px;
+  background: #1a3a5f;
+  border-radius: 50%;
+}
+
+.boss-george .eye .shine {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+}
+
+.boss-george .nose {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #4a9fb5;
+  border-radius: 50%;
+  top: 52%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.boss-george .mouth {
+  position: absolute;
+  width: 8px;
+  height: 2px;
+  top: 62%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #4a9fb5;
+  border-radius: 2px 2px 4px 4px;
+}
+
+/* George's Tentacles */
+.boss-george .tentacle {
+  position: absolute;
+  width: 14%;
+  height: 32%;
+  background: linear-gradient(180deg, #6ed3ff 0%, #4ab0d1 100%);
+  border-radius: 50%;
+  bottom: -8%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  align-items: center;
+  animation: tentacleWave 3s ease-in-out infinite;
+}
+
+@keyframes tentacleWave {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(-4deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(-4px) rotate(4deg); }
+}
+
+.boss-george .tentacle.t1 { left: 8%; animation-delay: 0s; }
+.boss-george .tentacle.t2 { left: 18%; animation-delay: 0.2s; }
+.boss-george .tentacle.t3 { left: 28%; animation-delay: 0.4s; }
+.boss-george .tentacle.t4 { left: 38%; animation-delay: 0.6s; }
+.boss-george .tentacle.t5 { right: 38%; animation-delay: 0.6s; }
+.boss-george .tentacle.t6 { right: 28%; animation-delay: 0.4s; }
+.boss-george .tentacle.t7 { right: 18%; animation-delay: 0.2s; }
+.boss-george .tentacle.t8 { right: 8%; animation-delay: 0s; }
+
+.boss-george .suction {
+  width: 3px;
+  height: 3px;
+  background: rgba(106, 179, 217, 0.6);
+  border-radius: 50%;
+  border: 1px solid rgba(74, 176, 209, 0.8);
+}
+
+/* Bubbles around George */
+.boss-george .bubble {
+  position: absolute;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.4), rgba(189, 255, 216, 0.2));
+  border: 1px solid rgba(189, 255, 216, 0.5);
+  border-radius: 50%;
+  animation: bubbleRise 4s ease-in infinite;
+}
+
+.boss-george .bubble.b1 {
+  width: 8px;
+  height: 8px;
+  top: 20%;
+  left: 12%;
+  animation-delay: 0s;
+}
+
+.boss-george .bubble.b2 {
+  width: 6px;
+  height: 6px;
+  top: 35%;
+  right: 15%;
+  animation-delay: 1s;
+}
+
+.boss-george .bubble.b3 {
+  width: 7px;
+  height: 7px;
+  bottom: 25%;
+  left: 20%;
+  animation-delay: 2s;
+}
+
+@keyframes bubbleRise {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+
+/* Swirl effect around George */
+.boss-george .swirl-effect {
+  position: absolute;
+  inset: -20%;
+  border: 2px solid transparent;
+  border-top-color: rgba(141, 255, 157, 0.3);
+  border-right-color: rgba(141, 255, 157, 0.2);
+  border-radius: 50%;
+  animation: swirl 6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes swirl {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+   ARENA ENVIRONMENT
+   ============================================================================ */
+
+.arena-background {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ground-layer {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 30%;
+}
+
+.ground-layer.base {
+  background: linear-gradient(180deg, rgba(100, 200, 150, 0.3) 0%, rgba(60, 120, 100, 0.2) 100%);
+}
+
+.ground-layer.shadow {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.2) 0%, transparent 70%);
+  height: 20%;
+  bottom: 10%;
+}
+
+.arena-decoration {
+  position: absolute;
+  top: 5%;
+  width: 15%;
+  height: 30%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arena-decoration.left {
+  left: 3%;
+}
+
+.arena-decoration.right {
+  right: 3%;
+  transform: scaleX(-1);
+}
+
+.arena-decoration .banner {
+  flex: 1;
+  background: linear-gradient(135deg, #ffeb3b, #ffd357);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.arena-decoration .streamer {
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #ff6ba8, transparent);
+  border-radius: 2px;
+  animation: streamerWave 2.5s ease-in-out infinite;
+}
+
+.arena-decoration .streamer.s1 {
+  animation-delay: 0s;
+}
+
+.arena-decoration .streamer.s2 {
+  animation-delay: 0.4s;
+}
+
+@keyframes streamerWave {
+  0%, 100% { transform: scaleX(1); opacity: 0.6; }
+  50% { transform: scaleX(1.3); opacity: 1; }
+}
+
+/* Particle Field */
+.particle-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: rgba(255, 235, 59, 0.6);
+  border-radius: 50%;
+  animation: particleFlutter 5s ease-in-out infinite;
+}
+
+.particle.p1 {
+  top: 20%;
+  left: 15%;
+  animation-delay: 0s;
+}
+
+.particle.p2 {
+  top: 35%;
+  right: 20%;
+  animation-delay: 1s;
+  background: rgba(189, 255, 216, 0.5);
+}
+
+.particle.p3 {
+  top: 50%;
+  left: 30%;
+  animation-delay: 2s;
+}
+
+.particle.p4 {
+  top: 60%;
+  right: 25%;
+  animation-delay: 1.5s;
+  background: rgba(255, 235, 59, 0.4);
+}
+
+.particle.p5 {
+  top: 25%;
+  left: 50%;
+  animation-delay: 2.5s;
+  background: rgba(189, 255, 216, 0.6);
+}
+
+@keyframes particleFlutter {
+  0% { opacity: 0; transform: translate(0, 0); }
+  25% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 8px), var(--ty, -8px)); }
+}
+
+/* ============================================================================
+   RESPONSIVE SIZING
+   ============================================================================ */
+
+.player-character.small,
+.boss-charlotte.small,
+.boss-george.small {
+  transform: scale(0.7);
+}
+
+@media (max-width: 640px) {
+  .player-character.large,
+  .boss-charlotte.large,
+  .boss-george.large {
+    transform: scale(0.85);
+  }
+}

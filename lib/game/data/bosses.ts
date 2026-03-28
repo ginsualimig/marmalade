@@ -17,5 +17,11 @@ export const BOSS_DEFINITIONS: BossData[] = [
     maxHP: 180,
     color: 0x77d6ff,
     description: "Tide spins, diagonal surges, mist puddles, whirlpool surge under 40%."
+  },
+  {
+    name: "Blaze Phoenix",
+    maxHP: 220,
+    color: 0xff6b35,
+    description: "Flame spirals, inferno waves, nest rebirth at 40% HP."
   }
 ];

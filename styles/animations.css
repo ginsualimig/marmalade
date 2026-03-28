@@ -1,0 +1,289 @@
+/**
+ * animations.css
+ * 
+ * Attack animation system - separated for clarity
+ * Enhanced attack, hurt, projectile, and impact animations
+ */
+
+/* ==========================================
+   HERO ATTACK: Forward lunge with intensity
+   ========================================== */
+
+@keyframes heroAttackEnhanced {
+  0% {
+    transform: translateX(0) scale(1) rotateY(0deg);
+    filter: saturate(1) brightness(1);
+  }
+  25% {
+    transform: translateX(32px) scale(1.15) rotateY(-8deg);
+    filter: saturate(1.3) brightness(1.1);
+  }
+  50% {
+    transform: translateX(18px) scale(1.08) rotateY(-5deg);
+    filter: saturate(1.15) brightness(1.05);
+  }
+  100% {
+    transform: translateX(0) scale(1) rotateY(0deg);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+/* ==========================================
+   BOSS ATTACK: Backward strike with power
+   ========================================== */
+
+@keyframes bossAttackEnhanced {
+  0% {
+    transform: translateX(0) scale(1) rotateY(0deg);
+    filter: saturate(1) brightness(1);
+  }
+  25% {
+    transform: translateX(-30px) scale(1.16) rotateY(8deg);
+    filter: saturate(1.35) brightness(0.95);
+  }
+  50% {
+    transform: translateX(-14px) scale(1.09) rotateY(5deg);
+    filter: saturate(1.18) brightness(0.98);
+  }
+  100% {
+    transform: translateX(0) scale(1) rotateY(0deg);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+/* ==========================================
+   HURT: Multi-frame wobble with darkening
+   ========================================== */
+
+@keyframes hurtWobbleEnhanced {
+  0% {
+    transform: rotate(0deg) scale(1);
+    filter: brightness(0.95);
+  }
+  12% {
+    transform: rotate(-9deg) scale(0.88);
+    filter: brightness(0.82);
+  }
+  28% {
+    transform: rotate(8deg) scale(0.87);
+    filter: brightness(0.8);
+  }
+  44% {
+    transform: rotate(-6deg) scale(0.92);
+    filter: brightness(0.88);
+  }
+  62% {
+    transform: rotate(5deg) scale(0.95);
+    filter: brightness(0.92);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+    filter: brightness(1);
+  }
+}
+
+/* ==========================================
+   PROJECTILES: Travel with glow & stretch
+   ========================================== */
+
+@keyframes heroShotEnhanced {
+  0% {
+    transform: translateX(0) scaleX(0.6) scaleY(1);
+    opacity: 0.8;
+    filter: blur(0px) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+  }
+  35% {
+    transform: translateX(82px) scaleX(1.4) scaleY(1.1);
+    opacity: 1;
+    filter: blur(0.1px) drop-shadow(0 0 12px rgba(158, 255, 232, 1));
+  }
+  70% {
+    transform: translateX(155px) scaleX(1.25) scaleY(1);
+    opacity: 1;
+    filter: blur(0.2px) drop-shadow(0 0 8px rgba(158, 255, 232, 0.9));
+  }
+  100% {
+    transform: translateX(175px) scaleX(0.7) scaleY(0.8);
+    opacity: 0;
+    filter: blur(0.3px) drop-shadow(0 0 2px rgba(158, 255, 232, 0.3));
+  }
+}
+
+@keyframes bossShotEnhanced {
+  0% {
+    transform: translateX(0) scaleX(0.6) scaleY(1);
+    opacity: 0.8;
+    filter: blur(0px) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+  }
+  35% {
+    transform: translateX(-82px) scaleX(1.4) scaleY(1.1);
+    opacity: 1;
+    filter: blur(0.1px) drop-shadow(0 0 12px rgba(255, 162, 190, 1));
+  }
+  70% {
+    transform: translateX(-155px) scaleX(1.25) scaleY(1);
+    opacity: 1;
+    filter: blur(0.2px) drop-shadow(0 0 8px rgba(255, 162, 190, 0.9));
+  }
+  100% {
+    transform: translateX(-175px) scaleX(0.7) scaleY(0.8);
+    opacity: 0;
+    filter: blur(0.3px) drop-shadow(0 0 2px rgba(255, 162, 190, 0.3));
+  }
+}
+
+/* ==========================================
+   IMPACT BURST: Multi-layer radial pop
+   ========================================== */
+
+@keyframes popBurstEnhanced {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.8);
+  }
+  20% {
+    transform: scale(1.6);
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.4);
+  }
+  45% {
+    transform: scale(1.15);
+    opacity: 0.95;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0);
+  }
+}
+
+/* ==========================================
+   DAMAGE NUMBERS: Float up with shimmer
+   ========================================== */
+
+@keyframes floatUpEnhanced {
+  0% {
+    transform: translateY(0) scale(0.7);
+    opacity: 0.1;
+    text-shadow: 0 0 0px rgba(255, 255, 100, 0);
+  }
+  25% {
+    transform: translateY(-12px) scale(1.1);
+    opacity: 1;
+    text-shadow: 0 0 16px rgba(255, 255, 100, 0.8);
+  }
+  70% {
+    transform: translateY(-28px) scale(1.05);
+    opacity: 0.7;
+    text-shadow: 0 0 12px rgba(255, 255, 100, 0.4);
+  }
+  100% {
+    transform: translateY(-36px) scale(0.95);
+    opacity: 0;
+    text-shadow: 0 0 4px rgba(255, 255, 100, 0);
+  }
+}
+
+/* ==========================================
+   COMBO SHINE: Pulsing light effect
+   ========================================== */
+
+@keyframes comboShine {
+  0% {
+    text-shadow: 0 0 8px rgba(255, 255, 100, 0), 0 4px 8px rgba(30, 0, 50, 0.55);
+    filter: brightness(1);
+  }
+  50% {
+    text-shadow: 0 0 20px rgba(255, 255, 100, 0.9), 0 4px 12px rgba(30, 0, 50, 0.8);
+    filter: brightness(1.15);
+  }
+  100% {
+    text-shadow: 0 0 8px rgba(255, 255, 100, 0), 0 4px 8px rgba(30, 0, 50, 0.55);
+    filter: brightness(1);
+  }
+}
+
+/* ==========================================
+   VICTORY GLOW: Golden wave
+   ========================================== */
+
+@keyframes victoryGlow {
+  0% {
+    box-shadow: 0 0 0 0px rgba(255, 215, 0, 0.8), 0 14px 35px rgba(25, 7, 54, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(255, 215, 0, 0.2), 0 14px 35px rgba(25, 7, 54, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 0px rgba(255, 215, 0, 0), 0 14px 35px rgba(25, 7, 54, 0.45);
+  }
+}
+
+/* ==========================================
+   DEFEAT FLASH: Red alert pulse
+   ========================================== */
+
+@keyframes defeatFlash {
+  0%, 100% {
+    box-shadow: 0 0 0 0px rgba(255, 100, 100, 0), 0 14px 35px rgba(25, 7, 54, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 100, 100, 0.4), 0 14px 35px rgba(25, 7, 54, 0.45);
+  }
+}
+
+/* ==========================================
+   ANIMATION APPLICATION
+   ========================================== */
+
+.hero-attack {
+  animation: heroAttackEnhanced 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.boss-attack {
+  animation: bossAttackEnhanced 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.hero-hurt,
+.boss-hurt {
+  animation: hurtWobbleEnhanced 0.58s linear !important;
+}
+
+/* Projectiles */
+.hero-shot {
+  animation: heroShotEnhanced 0.55s ease-out !important;
+}
+
+.boss-shot {
+  animation: bossShotEnhanced 0.55s ease-out !important;
+}
+
+/* Impact effect */
+.impact-burst {
+  animation: popBurstEnhanced 0.45s ease-out !important;
+}
+
+/* Damage popups */
+.damage-pop {
+  animation: floatUpEnhanced 0.9s ease-out forwards !important;
+}
+
+/* Combo variations */
+.damage-pop.combo-3 {
+  animation: floatUpEnhanced 0.9s ease-out forwards, comboShine 1.2s ease-in-out forwards !important;
+}
+
+.damage-pop.combo-5plus {
+  animation: floatUpEnhanced 0.9s ease-out forwards, comboShine 0.8s ease-in-out infinite !important;
+}
+
+/* Victory/defeat states */
+.battle-card.victory-mode {
+  animation: victoryGlow 1.8s ease-in-out infinite;
+}
+
+.battle-card.defeat-mode {
+  animation: defeatFlash 0.9s ease-in-out infinite;
+}

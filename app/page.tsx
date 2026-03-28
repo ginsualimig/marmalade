@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PlayerCharacter, BossVisuals, ArenaEnvironment } from "@/components/CharacterVisuals";
 import {
   clearHighScores,
   clearPreferredLevel,
@@ -28,10 +29,30 @@ import {
   type StoredHighScores
 } from "@/lib/game/quizPersistence";
 import {
+  createCharacter,
+  saveCharacter,
+  loadCharacter,
+  getAppearanceEmoji,
+  APPEARANCE_OPTIONS,
+  type CharacterState,
+  type CharacterGender,
+  type AppearanceCategory
+} from "@/lib/game/characterState";
+import {
   MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS,
   MODE_CURRICULUM_CLUSTERS,
   STAGE_CURRICULUM
 } from "@/lib/game/curriculum";
+import {
+  getAttackClasses,
+  getSpriteAnimationClass,
+  getProjectileType,
+  getImpactBurstPosition,
+  shouldShowImpactBurst,
+  shouldShowProjectile,
+  getTimerUrgencyLevel,
+  getTimerAriaLabel
+} from "@/lib/game/animations";
 
 type Boss = {
   id: "charlotte" | "george";
@@ -100,6 +121,13 @@ type BattleStats = {
   skillProgress: Record<SkillArea, SkillProgress>;
 };
 
+type FeedbackType = {
+  message: string;
+  type: "correct" | "wrong" | "timeout" | "boss-defeated";
+  correctAnswer?: string;
+  questionType?: "Spelling" | "Maths";
+};
+
 type BattleState = {
   bossIndex: number;
   bossHp: number;
@@ -107,6 +135,7 @@ type BattleState = {
   round: number;
   question: Question;
   feedback: string;
+  feedbackData?: FeedbackType;
   phase: "quiz" | "boss-defeated";
   lastHit: "player" | "boss" | null;
   stats: BattleStats;
@@ -406,7 +435,7 @@ const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: Le
   };
 };
 
-type Screen = "title" | "battle" | "summary";
+type Screen = "character-creation" | "title" | "battle" | "summary";
 
 let audioCtx: AudioContext | null = null;
 const getAudioContext = () => {
@@ -416,6 +445,30 @@ const getAudioContext = () => {
   if (!Ctor) return null;
   audioCtx = new Ctor();
   return audioCtx;
+};
+
+const WrongAnswerFeedback = ({ feedback }: { feedback: FeedbackType }) => {
+  const isTimeout = feedback.type === "timeout";
+  const isMath = feedback.questionType === "Maths";
+  
+  return (
+    <div className={`wrong-answer-panel ${isTimeout ? "timeout-variant" : "wrong-variant"}`}>
+      <div className="correct-answer-section">
+        <div className="correct-label">{isTimeout ? "⏰ Time out!" : "Not quite!"}</div>
+        <div className="correct-answer-display">
+          <span className="answer-icon">{isMath ? "🔢" : "📝"}</span>
+          <span className="answer-value">{feedback.correctAnswer}</span>
+        </div>
+        <div className="answer-hint">
+          {isMath ? "The correct sum is:" : "The correct spelling is:"}
+        </div>
+      </div>
+      
+      <div className="feedback-message-section">
+        <p className="feedback-message">{feedback.message}</p>
+      </div>
+    </div>
+  );
 };
 
 const blip = (freq: number, duration: number, type: OscillatorType, volume = 0.05) => {
@@ -452,11 +505,18 @@ function buildCorrectFeedback(boss: Boss, question: Question, hpAfterHit: number
   return `${pickLine(COACH_PRAISE)} ${bossLine} ${tip}`;
 }
 
-function buildWrongFeedback(boss: Boss, question: Question) {
-  const learning = question.typeLabel === "Spelling"
-    ? `Correct answer: ${question.correct}. Look for vowel sounds and word chunks.`
-    : `Correct answer: ${question.correct}. Break the sum into smaller steps.`;
-  return `${pickLine(COACH_RETRY)} ${boss.taunts.attack} ${learning}`;
+function buildWrongFeedback(boss: Boss, question: Question): FeedbackType {
+  const coachLine = pickLine(COACH_RETRY);
+  const hint = question.typeLabel === "Spelling"
+    ? "Look for vowel sounds and word chunks."
+    : "Break the sum into smaller steps.";
+  
+  return {
+    message: `${coachLine} ${boss.taunts.attack} ${hint}`,
+    type: "wrong",
+    correctAnswer: question.correct,
+    questionType: question.typeLabel
+  };
 }
 
 
@@ -530,6 +590,8 @@ const getInitialState = () => {
   const validProgress = storedProgress && (storedProgress.mode === "sprout" || storedProgress.mode === "spark" || storedProgress.mode === "comet")
     ? storedProgress
     : null;
+  const loadedCharacter = loadCharacter();
+  const hasCharacter = loadedCharacter !== null;
 
   return {
     settings: initialSettings,
@@ -538,6 +600,8 @@ const getInitialState = () => {
     ageBand: MODE_TO_AGE[initialMode],
     highScores: loadHighScores(),
     summaries: loadRunSummaries(),
+    character: loadedCharacter,
+    hasCharacter,
     battle: initialBattle,
     checkpoint: initialBattle,
     resumeRun: validProgress
@@ -554,14 +618,25 @@ const getInitialState = () => {
 export default function Page() {
   const [initial] = useState(() => getInitialState());
 
-  const [screen, setScreen] = useState<Screen>("title");
+  const [screen, setScreen] = useState<Screen>(initial.hasCharacter ? "title" : "character-creation");
   const [mode, setMode] = useState<DifficultyMode>(initial.mode);
   const [ageBand, setAgeBand] = useState<AgeBand>(initial.ageBand);
   const [level, setLevel] = useState<LearnerLevel>(initial.level);
   const [settings, setSettings] = useState<ParentSettings>(initial.settings);
   const [highScores, setHighScores] = useState<StoredHighScores>(initial.highScores);
   const [summaries, setSummaries] = useState<RunSummary[]>(initial.summaries);
+  const [character, setCharacter] = useState<CharacterState | null>(initial.character);
   const [resumeRun, setResumeRun] = useState<{ mode: DifficultyMode; level: LearnerLevel; battle: BattleState; checkpoint: BattleState | null } | null>(initial.resumeRun);
+  
+  // Character creation state
+  const [charNameInput, setCharNameInput] = useState<string>("");
+  const [charGender, setCharGender] = useState<CharacterGender>("boy");
+  const [charAppearance, setCharAppearance] = useState<Record<AppearanceCategory, string>>({
+    hat: APPEARANCE_OPTIONS.hat[0].id,
+    shirt: APPEARANCE_OPTIONS.shirt[0].id,
+    pants: APPEARANCE_OPTIONS.pants[0].id,
+    shoes: APPEARANCE_OPTIONS.shoes[0].id
+  });
 
   const [battle, setBattle] = useState<BattleState>(initial.battle);
   const [checkpoint, setCheckpoint] = useState<BattleState | null>(initial.checkpoint);
@@ -631,8 +706,9 @@ export default function Page() {
   ];
   const questionTimerKey = `${screen}-${battle.phase}-${battle.bossIndex}-${battle.round}-${battle.question.prompt}`;
   const timerPercent = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_TIME_LIMIT) * 100));
-  const timerUrgent = questionTimeLeft <= 15;
-  const timerCritical = questionTimeLeft <= 7;
+  const timerUrgency = getTimerUrgencyLevel(Math.max(0, questionTimeLeft), QUESTION_TIME_LIMIT);
+  const timerUrgent = timerUrgency === "urgent" || timerUrgency === "critical";
+  const timerCritical = timerUrgency === "critical";
 
   useEffect(() => {
     if (settings.persistDifficulty) {
@@ -683,6 +759,27 @@ export default function Page() {
   const speak = (line: string, cue: "start" | "correct" | "wrong" | "bossDown" | "victory") => {
     setVoiceLine(line);
     speakCue(cue);
+  };
+
+  const completeCharacterCreation = () => {
+    const newCharacter = createCharacter(charNameInput, charGender);
+    const customizedCharacter = {
+      ...newCharacter,
+      appearance: charAppearance
+    };
+    setCharacter(customizedCharacter);
+    saveCharacter(customizedCharacter);
+    setScreen("title");
+    speak(`Welcome, ${customizedCharacter.name}! Ready for your quest?`, "start");
+  };
+
+  const editCharacter = () => {
+    if (character) {
+      setCharNameInput(character.name);
+      setCharGender(character.gender);
+      setCharAppearance(character.appearance);
+      setScreen("character-creation");
+    }
   };
 
   const updateSetting = <K extends keyof ParentSettings>(key: K, value: ParentSettings[K]) => {
@@ -846,7 +943,19 @@ export default function Page() {
 
   const resolveWrongAnswer = (isTimeout: boolean) => {
     const newPlayerHp = Math.max(0, battle.playerHp - config.wrongDamage);
-    const timeoutFeedback = `${currentBoss.taunts.attack} ⏰ Time out! Correct answer: ${battle.question.correct}.`;
+    
+    let feedbackData: FeedbackType;
+    if (isTimeout) {
+      feedbackData = {
+        message: `${currentBoss.taunts.attack}`,
+        type: "timeout",
+        correctAnswer: battle.question.correct,
+        questionType: battle.question.typeLabel
+      };
+    } else {
+      feedbackData = buildWrongFeedback(currentBoss, battle.question);
+    }
+
     setAttackMode("boss");
     setDamagePop({ target: "player", amount: config.wrongDamage });
     if (isTimeout) {
@@ -859,7 +968,8 @@ export default function Page() {
       const defeatedBattle: BattleState = {
         ...battle,
         playerHp: 0,
-        feedback: isTimeout ? timeoutFeedback : buildWrongFeedback(currentBoss, battle.question),
+        feedback: feedbackData.message,
+        feedbackData,
         lastHit: "player",
         stats: {
           ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
@@ -879,7 +989,8 @@ export default function Page() {
       playerHp: newPlayerHp,
       round: nextRound,
       question: createQuestion(currentBoss, nextRound, config, mode, level),
-      feedback: isTimeout ? timeoutFeedback : buildWrongFeedback(currentBoss, battle.question),
+      feedback: feedbackData.message,
+      feedbackData,
       lastHit: "player",
       stats: {
         ...bumpSkillProgress(battle.stats, battle.question.skillArea, false),
@@ -998,8 +1109,128 @@ export default function Page() {
         <p>{voiceLine}</p>
       </section>
 
+      {screen === "character-creation" && (
+        <section className="card center-stack character-creation-card">
+          <h2>Create Your Hero</h2>
+          <p>Welcome, adventurer! Let&apos;s build your character for the quiz quest.</p>
+
+          <div className="char-form">
+            <div className="form-group">
+              <label htmlFor="hero-name">
+                <strong>What&apos;s your hero name?</strong>
+              </label>
+              <input
+                id="hero-name"
+                type="text"
+                className="text-input"
+                value={charNameInput}
+                onChange={(e) => setCharNameInput(e.target.value)}
+                placeholder="Enter your hero name"
+                maxLength={30}
+              />
+              {!charNameInput.trim() && (
+                <small style={{ color: "#999" }}>
+                  Don&apos;t worry — if you leave this blank, we&apos;ll call you &quot;Hero&quot;
+                </small>
+              )}
+            </div>
+
+            <div className="form-group">
+              <strong>Are you a boy or girl?</strong>
+              <div className="gender-buttons">
+                <button
+                  className={`gender-btn ${charGender === "boy" ? "selected" : ""}`}
+                  onClick={() => setCharGender("boy")}
+                >
+                  👦 Boy
+                </button>
+                <button
+                  className={`gender-btn ${charGender === "girl" ? "selected" : ""}`}
+                  onClick={() => setCharGender("girl")}
+                >
+                  👧 Girl
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <strong>Customize Your Look</strong>
+              <div className="appearance-preview">
+                <div className="preview-emojis" aria-hidden>
+                  <div>{getAppearanceEmoji("hat", charAppearance.hat)}</div>
+                  <div>{getAppearanceEmoji("shirt", charAppearance.shirt)}</div>
+                  <div>{getAppearanceEmoji("pants", charAppearance.pants)}</div>
+                  <div>{getAppearanceEmoji("shoes", charAppearance.shoes)}</div>
+                </div>
+                <p className="preview-label">Your hero:</p>
+              </div>
+
+              {(["hat", "shirt", "pants", "shoes"] as AppearanceCategory[]).map((category) => (
+                <div key={category} className="appearance-category">
+                  <label>
+                    <strong>
+                      {category.charAt(0).toUpperCase() + category.slice(1)}
+                    </strong>
+                  </label>
+                  <div className="appearance-options">
+                    {APPEARANCE_OPTIONS[category].map((option) => (
+                      <button
+                        key={option.id}
+                        className={`appearance-btn ${
+                          charAppearance[category] === option.id ? "selected" : ""
+                        }`}
+                        onClick={() =>
+                          setCharAppearance({
+                            ...charAppearance,
+                            [category]: option.id
+                          })
+                        }
+                        title={option.label}
+                      >
+                        <span className="appearance-emoji">{option.emoji}</span>
+                        <span className="appearance-label">{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              className="big-btn"
+              onClick={completeCharacterCreation}
+              disabled={!charNameInput.trim() && charNameInput.length === 0}
+            >
+              Create My Hero
+            </button>
+          </div>
+        </section>
+      )}
+
       {screen === "title" && (
         <section className="card center-stack">
+          {character && (
+            <div className="character-intro-card">
+              <div className="character-display">
+                <div className="character-emojis" aria-hidden>
+                  <div className="emoji-item">{getAppearanceEmoji("hat", character.appearance.hat)}</div>
+                  <div className="emoji-item">{getAppearanceEmoji("shirt", character.appearance.shirt)}</div>
+                  <div className="emoji-item">{getAppearanceEmoji("pants", character.appearance.pants)}</div>
+                  <div className="emoji-item">{getAppearanceEmoji("shoes", character.appearance.shoes)}</div>
+                </div>
+                <div>
+                  <h3>{character.name}</h3>
+                  <p className="character-gender">
+                    {character.gender === "boy" ? "👦" : "👧"} {character.gender === "boy" ? "Boy hero" : "Girl hero"}
+                  </p>
+                </div>
+              </div>
+              <button className="mini-btn" onClick={editCharacter}>
+                Edit Character
+              </button>
+            </div>
+          )}
+
           <div className="settings-card">
             <strong>Learning Setup</strong>
             <div className="settings-grid">
@@ -1094,7 +1325,7 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card ${currentBoss.colorClass} ${battle.lastHit === "player" ? "danger-flash" : battle.lastHit === "boss" ? "win-flash" : ""} ${attackMode === "boss" ? "screen-shake" : ""} ${attackMode === "hero" ? "hero-zoom" : ""} ${timeoutFlash ? "timeout-blast" : ""}`}>
+        <section className={`card battle-card ${currentBoss.colorClass} ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
           <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
 
@@ -1104,28 +1335,54 @@ export default function Page() {
           </div>
 
           <div className="battle-stage">
+            <div className="arena-container left">
+              <ArenaEnvironment />
+            </div>
+
             <div className="versus-badge" aria-hidden>VS</div>
-            <div className={`hero-sprite ${attackMode === "hero" ? "hero-attack" : ""} ${attackMode === "boss" ? "hero-hurt" : ""}`}>
-              <div className="hero-portrait" aria-hidden>
-                <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
-              </div>
-              <div className="sprite-label">You</div>
+
+            <div className={`hero-sprite ${getSpriteAnimationClass("hero", attackMode, attackMode === "boss")}`}>
+              {character ? (
+                <PlayerCharacter
+                  outfit={{
+                    hat: character.appearance.hat,
+                    shirt: character.appearance.shirt,
+                    pants: character.appearance.pants,
+                    shoes: character.appearance.shoes
+                  }}
+                  animated={attackMode === "hero"}
+                  size="large"
+                />
+              ) : (
+                <div className="hero-portrait" aria-hidden>
+                  <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
+                </div>
+              )}
+              <div className="sprite-label">{character?.name ?? "You"}</div>
               {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
             </div>
 
             <div className="projectile-lane" aria-hidden>
-              {attackMode === "hero" && <div className="projectile hero-shot" />}
-              {attackMode === "boss" && <div className="projectile boss-shot" />}
-              {attackMode === "hero" && <div className="impact-burst right" />}
-              {attackMode === "boss" && <div className="impact-burst left" />}
+              {shouldShowProjectile(attackMode) && (
+                <div className={`projectile ${getProjectileType(attackMode)}`} />
+              )}
+              {shouldShowImpactBurst(attackMode) && (
+                <div className={`impact-burst ${getImpactBurstPosition(attackMode)}`} />
+              )}
             </div>
 
-            <div className={`boss-sprite ${attackMode === "boss" ? "boss-attack" : ""} ${attackMode === "hero" ? "boss-hurt" : ""}`}>
-              <div className={`boss-portrait large ${currentBoss.avatarClass}`} aria-hidden>
-                <div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape flare" />
-              </div>
+            <div className={`boss-sprite ${getSpriteAnimationClass("boss", attackMode, attackMode === "hero")}`}>
+              <BossVisuals
+                bossId={currentBoss.id}
+                animated={attackMode === "boss"}
+                size="large"
+              />
               <div className="sprite-label">{currentBoss.name}</div>
               {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
+            </div>
+
+            <div className="arena-container right">
+              <ArenaEnvironment />
             </div>
           </div>
 
@@ -1133,7 +1390,11 @@ export default function Page() {
             <div>
               <h2>{currentBoss.name}</h2>
               <p>{currentBoss.subtitle}</p>
-              <p className="feedback">{battle.feedback}</p>
+              {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
+                <WrongAnswerFeedback feedback={battle.feedbackData} />
+              ) : (
+                <p className="feedback">{battle.feedback}</p>
+              )}
             </div>
             <div className="score">Score {score}</div>
           </div>
@@ -1144,7 +1405,7 @@ export default function Page() {
                 <div className="question-type">{battle.question.typeLabel} Challenge · {battle.question.inputMode === "typed" ? "Type" : "Pick one"}</div>
                 <div className="question-count">Question {battle.round + 1}</div>
               </div>
-              <div className={`question-timer ${timerUrgent ? "urgent" : ""} ${timerCritical ? "critical" : ""}`} role="timer" aria-live="assertive" aria-label={`Time left: ${Math.max(0, questionTimeLeft)} seconds`}>
+              <div className={`question-timer ${timerUrgent ? "urgent" : ""} ${timerCritical ? "critical" : ""}`} role="timer" aria-live="assertive" aria-label={getTimerAriaLabel(Math.max(0, questionTimeLeft), timerUrgency)}>
                 <div className="timer-top-row">
                   <strong>⏱️ {Math.max(0, questionTimeLeft)}s</strong>
                   <span>{timerCritical ? "HURRY!" : timerUrgent ? "Quick answer" : "60-second challenge"}</span>
