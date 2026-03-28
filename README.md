@@ -1,22 +1,28 @@
-# Marmalade: Tiny Guardian Boss Rush
+# Marmalade: Quiz Boss Battle
 
-A playful Phaser-powered mini boss rush built with Next.js. Charlotte and George test reflexes, combos, and math smarts as you balance movement, attacks, and educational pickups.
+A simplified, kid-friendly quiz battler built with Next.js for web/Vercel deployment.
 
-## Local setup
+## Core gameplay
+
+- Start screen with both bosses.
+- Battle Charlotte first, then George.
+- Every turn is an educational challenge:
+  - **Spelling**: fill-in-the-blank, first-letter, and word completion.
+  - **Maths**: addition/subtraction with **Charlotte harder** and **George simpler**.
+- Correct answer = damage boss.
+- Wrong answer = player takes damage.
+- Includes clear victory and game-over flow.
+
+## Run locally
 
 ```bash
 npm install
-npm run dev    # start locally on http://localhost:3000
-npm run build  # verify the production build
+npm run dev
 ```
 
-## Codex-only note
+## Quality checks
 
-This repository was bootstrapped, coded, and documented exclusively with OpenAI Codex models (`openai-codex/gpt-5.1-codex-mini`, escalating to `openai-codex/gpt-5.1-codex-max` only when necessary) per project constraints.
-
-## Playable hints
-
-- Use keyboard (arrows + Z/X/C) or the on-screen touch controls.
-- The bosses rotate between Charlotte (shield + toys) and George (spin + puddles).
-- Follow the HUD word challenge: collect letter orbs in order to spell the featured word for MP and score boosts while avoiding words that start with the highlighted dodge letter.
-- Pick numbers ≥ the displayed target to keep combos healthy, then line up your score with the math gate equation before you run through it; matching the sum keeps combos rolling, missing it scrapes HP.
+```bash
+npm run lint
+npm run build
+```

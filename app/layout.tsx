@@ -1,8 +1,8 @@
 import "@/styles/globals.css";
 
 export const metadata = {
-  title: "Marmalade: Boss Rush",
-  description: "Placeholder Asian fantasy boss rush game for 4-8 year olds."
+  title: "Marmalade: Quiz Boss Battle",
+  description: "Kid-friendly web game where spelling and maths answers power boss battles against Charlotte and George."
 };
 
 export default function RootLayout({
@@ -12,9 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <div className="app-shell">{children}</div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
