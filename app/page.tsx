@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Boss = {
   id: "charlotte" | "george";
@@ -8,6 +8,12 @@ type Boss = {
   emoji: string;
   colorClass: string;
   subtitle: string;
+  taunts: {
+    intro: string;
+    hit: string;
+    attack: string;
+    defeated: string;
+  };
 };
 
 type Question = {
@@ -34,14 +40,26 @@ const BOSSES: Boss[] = [
     name: "Charlotte",
     emoji: "👑🐲",
     colorClass: "boss-charlotte",
-    subtitle: "Brainy Queen of Big Challenges"
+    subtitle: "Sparkle Dragon Queen of Tricky Brain Quests",
+    taunts: {
+      intro: "Kneel before my puzzle crown!",
+      hit: "What?! You cracked my royal riddle!",
+      attack: "Royal fireball! Mind your maths!",
+      defeated: "My crown... outsmarted by a tiny legend!"
+    }
   },
   {
     id: "george",
     name: "George",
     emoji: "🧢🦖",
     colorClass: "boss-george",
-    subtitle: "Silly Dino Captain of Easy Maths"
+    subtitle: "Goofy Dino Captain of Number Nonsense",
+    taunts: {
+      intro: "RAWR! I attack with silly sums!",
+      hit: "Whoa! That answer bonked my snout!",
+      attack: "Dino boing-bash incoming!",
+      defeated: "Okay okay, you win... can we be pals?"
+    }
   }
 ];
 
@@ -157,7 +175,7 @@ const createInitialBattleState = (): BattleState => ({
   playerHp: PLAYER_MAX_HP,
   round: 0,
   question: createQuestion(BOSSES[0], 0),
-  feedback: "Charlotte appears! Answer correctly to strike!",
+  feedback: `Charlotte appears! ${BOSSES[0].taunts.intro}`,
   phase: "quiz",
   lastHit: null
 });
@@ -165,6 +183,9 @@ const createInitialBattleState = (): BattleState => ({
 export default function Page() {
   const [screen, setScreen] = useState<"title" | "battle" | "victory" | "game-over">("title");
   const [battle, setBattle] = useState<BattleState>(createInitialBattleState);
+  const [attackMode, setAttackMode] = useState<"none" | "hero" | "boss">("none");
+  const [damagePop, setDamagePop] = useState<{ target: "boss" | "player"; amount: number } | null>(null);
+  const [phaseBanner, setPhaseBanner] = useState<string | null>(null);
 
   const currentBoss = BOSSES[battle.bossIndex];
   const score = useMemo(() => {
@@ -173,8 +194,29 @@ export default function Page() {
     return (defeated + progress) * 100;
   }, [battle.bossHp, battle.bossIndex]);
 
+  useEffect(() => {
+    if (attackMode === "none") return;
+    const t = setTimeout(() => setAttackMode("none"), 700);
+    return () => clearTimeout(t);
+  }, [attackMode]);
+
+  useEffect(() => {
+    if (!damagePop) return;
+    const t = setTimeout(() => setDamagePop(null), 900);
+    return () => clearTimeout(t);
+  }, [damagePop]);
+
+  useEffect(() => {
+    if (!phaseBanner) return;
+    const t = setTimeout(() => setPhaseBanner(null), 1400);
+    return () => clearTimeout(t);
+  }, [phaseBanner]);
+
   const startGame = () => {
     setBattle(createInitialBattleState());
+    setAttackMode("none");
+    setDamagePop(null);
+    setPhaseBanner("Battle Start!");
     setScreen("battle");
   };
 
@@ -193,9 +235,12 @@ export default function Page() {
       round: 0,
       phase: "quiz",
       question: createQuestion(next, 0),
-      feedback: `${next.name} jumps in! Keep solving spelling and maths!`,
+      feedback: `${next.name} jumps in! ${next.taunts.intro}`,
       lastHit: null
     }));
+    setAttackMode("none");
+    setDamagePop(null);
+    setPhaseBanner(`${next.name} Enters!`);
   };
 
   const answer = (choice: string) => {
@@ -206,15 +251,19 @@ export default function Page() {
 
     if (isCorrect) {
       const newBossHp = Math.max(0, battle.bossHp - CORRECT_DAMAGE);
+      setAttackMode("hero");
+      setDamagePop({ target: "boss", amount: CORRECT_DAMAGE });
+
       if (newBossHp <= 0) {
         setBattle((prev) => ({
           ...prev,
           bossHp: 0,
           round: nextRound,
-          feedback: `Boom! ${currentBoss.name} is defeated!`,
+          feedback: `${currentBoss.taunts.defeated}`,
           phase: "boss-defeated",
           lastHit: "boss"
         }));
+        setPhaseBanner("Boss Defeated!");
         return;
       }
 
@@ -223,18 +272,21 @@ export default function Page() {
         bossHp: newBossHp,
         round: nextRound,
         question: createQuestion(currentBoss, nextRound),
-        feedback: "Correct! Huge hit to the boss!",
+        feedback: `Correct! ${currentBoss.taunts.hit}`,
         lastHit: "boss"
       }));
       return;
     }
 
     const newPlayerHp = Math.max(0, battle.playerHp - WRONG_DAMAGE);
+    setAttackMode("boss");
+    setDamagePop({ target: "player", amount: WRONG_DAMAGE });
+
     if (newPlayerHp <= 0) {
       setBattle((prev) => ({
         ...prev,
         playerHp: 0,
-        feedback: "Oops! You ran out of hearts.",
+        feedback: `Oops! ${currentBoss.taunts.attack}`,
         lastHit: "player"
       }));
       setScreen("game-over");
@@ -246,7 +298,7 @@ export default function Page() {
       playerHp: newPlayerHp,
       round: nextRound,
       question: createQuestion(currentBoss, nextRound),
-      feedback: "Not quite! The boss hit back.",
+      feedback: `Not quite! ${currentBoss.taunts.attack}`,
       lastHit: "player"
     }));
   };
@@ -266,6 +318,7 @@ export default function Page() {
                 <div className="emoji">{boss.emoji}</div>
                 <strong>{boss.name}</strong>
                 <span>{boss.subtitle}</span>
+                <small>“{boss.taunts.intro}”</small>
               </div>
             ))}
           </div>
@@ -276,7 +329,11 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card ${currentBoss.colorClass} ${battle.lastHit === "player" ? "danger-flash" : battle.lastHit === "boss" ? "win-flash" : ""}`}>
+        <section
+          className={`card battle-card ${currentBoss.colorClass} ${battle.lastHit === "player" ? "danger-flash" : battle.lastHit === "boss" ? "win-flash" : ""} ${attackMode === "boss" ? "screen-shake" : ""}`}
+        >
+          {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
+
           <div className="hud-row">
             <div className="hud-box">
               <strong>Hero HP ❤️ {battle.playerHp}/100</strong>
@@ -288,8 +345,28 @@ export default function Page() {
             </div>
           </div>
 
+          <div className="battle-stage">
+            <div className={`hero-sprite ${attackMode === "hero" ? "hero-attack" : ""} ${attackMode === "boss" ? "hero-hurt" : ""}`}>
+              <div className="sprite-emoji">🦸‍♀️✨</div>
+              <div className="sprite-label">You</div>
+              {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
+            </div>
+
+            <div className="projectile-lane" aria-hidden>
+              {attackMode === "hero" && <div className="projectile hero-shot">🌈⚡</div>}
+              {attackMode === "boss" && <div className="projectile boss-shot">🔥💨</div>}
+              {attackMode === "hero" && <div className="impact-burst right">💥✨</div>}
+              {attackMode === "boss" && <div className="impact-burst left">💢</div>}
+            </div>
+
+            <div className={`boss-sprite ${attackMode === "boss" ? "boss-attack" : ""} ${attackMode === "hero" ? "boss-hurt" : ""}`}>
+              <div className="sprite-emoji">{currentBoss.emoji}</div>
+              <div className="sprite-label">{currentBoss.name}</div>
+              {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
+            </div>
+          </div>
+
           <div className="boss-stage">
-            <div className="boss-emoji">{currentBoss.emoji}</div>
             <div>
               <h2>{currentBoss.name}</h2>
               <p>{currentBoss.subtitle}</p>
@@ -322,9 +399,12 @@ export default function Page() {
       )}
 
       {screen === "victory" && (
-        <section className="card center-stack end-card">
+        <section className="card center-stack end-card celebration">
           <h2>🏆 You Win!</h2>
           <p>You defeated Charlotte and George with spelling and maths power.</p>
+          <div className="confetti" aria-hidden>
+            <span>🎉</span><span>🌟</span><span>🎊</span><span>🍬</span><span>✨</span>
+          </div>
           <button className="big-btn" onClick={startGame}>Play Again</button>
         </section>
       )}
