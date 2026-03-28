@@ -1,0 +1,584 @@
+/* Scene-first battle composition reset */
+.page-wrap.battle-shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(134, 96, 255, 0.32), transparent 32%),
+    radial-gradient(circle at 20% 22%, rgba(116, 214, 255, 0.16), transparent 22%),
+    radial-gradient(circle at 78% 18%, rgba(255, 205, 118, 0.18), transparent 20%),
+    linear-gradient(180deg, #120b2f 0%, #1b1043 42%, #110925 100%);
+}
+
+.battle-card.battle-viewport {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: max(env(safe-area-inset-top), 0.55rem) 0.7rem max(env(safe-area-inset-bottom), 0.7rem);
+  gap: 0.55rem;
+  overflow: clip;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255,255,255,0.16), transparent 18%),
+    linear-gradient(180deg, rgba(53, 28, 116, 0.98) 0%, rgba(28, 14, 67, 0.98) 60%, rgba(17, 9, 37, 0.99) 100%);
+}
+
+.battle-topline {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.battle-essentials {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.battle-mini-stat {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.mini-stat-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.battle-mini-stat strong,
+.battle-boss-healthcard strong {
+  font-size: 0.92rem;
+  line-height: 1;
+  color: #fff;
+}
+
+.mini-bar,
+.battle-scene-bar {
+  height: 10px;
+  border-width: 1px;
+}
+
+.battle-center-readout {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+}
+
+.battle-round-chip,
+.battle-score-chip,
+.question-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 3.15rem;
+  min-height: 1.9rem;
+  padding: 0.28rem 0.56rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.battle-round-chip {
+  background: rgba(255,255,255,0.12);
+  color: #f8f2ff;
+}
+
+.battle-score-chip,
+.question-count {
+  background: linear-gradient(180deg, #ffe79c, #ffbf45);
+  color: #452300;
+}
+
+.battle-topline .pause-btn {
+  min-width: 2.8rem;
+  min-height: 2.8rem;
+  padding: 0;
+  border-radius: 14px;
+  font-size: 1rem;
+}
+
+.battle-scene-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+}
+
+.battle-scene-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.9fr);
+  gap: 0.55rem;
+}
+
+.battle-boss-focus,
+.battle-duel-floor,
+.battle-question-dock {
+  min-width: 0;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 44px rgba(7, 3, 20, 0.28);
+}
+
+.battle-boss-focus {
+  position: relative;
+  min-height: 0;
+  padding: 0.8rem 0.95rem 0.65rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.95fr);
+  gap: 0.75rem;
+  background:
+    radial-gradient(circle at 78% 16%, rgba(255, 220, 140, 0.18), transparent 28%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+  overflow: hidden;
+}
+
+.battle-boss-focus::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 0.3rem;
+  height: 20%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(121, 93, 255, 0.24), rgba(121, 93, 255, 0));
+  pointer-events: none;
+}
+
+.battle-boss-status {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.7rem;
+  z-index: 1;
+}
+
+.battle-scene-kicker {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  padding: 0.26rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  color: #f4eaff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.battle-boss-copy h2 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  line-height: 0.95;
+  color: #fff7d6;
+}
+
+.battle-boss-copy p {
+  margin: 0.45rem 0 0;
+  max-width: 24rem;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  color: #e7ddff;
+}
+
+.battle-boss-healthcard {
+  display: grid;
+  gap: 0.3rem;
+  align-self: end;
+  padding: 0.65rem 0.75rem;
+  border-radius: 18px;
+  background: rgba(15, 7, 38, 0.42);
+  border: 1px solid rgba(255,255,255,0.08);
+  max-width: 16rem;
+}
+
+.battle-boss-sprite {
+  min-height: 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 0.35rem 0.35rem 0.6rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  z-index: 1;
+}
+
+.battle-boss-sprite .keeper-sprite {
+  transform: scale(1.08);
+  transform-origin: center bottom;
+}
+
+.battle-boss-sprite .sprite-label,
+.battle-player-presence .sprite-label {
+  position: static;
+  transform: none;
+  min-width: 0;
+  margin-top: -0.15rem;
+  padding: 0.32rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+.battle-duel-floor {
+  min-height: 0;
+  padding: 0.55rem 0.7rem 0.65rem;
+  display: grid;
+  grid-template-columns: minmax(130px, 0.9fr) minmax(0, 1.2fr);
+  gap: 0.6rem;
+  align-items: stretch;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+}
+
+.battle-player-presence,
+.battle-scene-center {
+  min-height: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.battle-player-presence {
+  padding: 0.6rem 0.55rem;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.35rem;
+  background: linear-gradient(180deg, rgba(107, 223, 255, 0.13), rgba(255,255,255,0.04));
+}
+
+.battle-player-presence .player-character {
+  transform: scale(0.86);
+  transform-origin: center bottom;
+}
+
+.battle-player-meta {
+  width: 100%;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.battle-lives-strip {
+  display: flex;
+  gap: 0.18rem;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.battle-player-health {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.battle-scene-center {
+  padding: 0.55rem;
+  display: grid;
+  grid-template-rows: auto auto minmax(34px, auto) minmax(56px, 1fr);
+  gap: 0.35rem;
+  background: linear-gradient(180deg, rgba(255, 215, 120, 0.08), rgba(255,255,255,0.04));
+}
+
+.battle-scene-skill-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.06rem;
+  text-align: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 14px;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255,215,0,0.16);
+}
+
+.battle-scene-skill-pill span {
+  font-size: 0.66rem;
+  line-height: 1.1;
+  color: #fff6cb;
+}
+
+.battle-scene-skill-pill strong {
+  font-size: 0.74rem;
+  color: #ffe173;
+  text-transform: uppercase;
+}
+
+.battle-scene-power {
+  height: 12px;
+}
+
+.battle-scene-projectile {
+  min-height: 34px;
+}
+
+.battle-scene-projectile .projectile {
+  top: 28%;
+  width: 34px;
+  height: 10px;
+}
+
+.battle-scene-projectile .impact-burst {
+  top: 6%;
+  width: 34px;
+  height: 34px;
+}
+
+.battle-scene-feedback,
+.battle-scene-feedback .wrong-answer-panel {
+  height: 100%;
+  margin: 0;
+  border-radius: 16px;
+}
+
+.battle-scene-feedback {
+  display: grid;
+  align-items: stretch;
+  padding: 0.55rem;
+  background: rgba(255,255,255,0.08);
+  text-align: center;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  color: #fff4c7;
+}
+
+.battle-scene-feedback .wrong-answer-panel {
+  gap: 0.45rem;
+  padding: 0.55rem;
+}
+
+.battle-question-dock {
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+}
+
+.battle-question-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.battle-question-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.battle-question-dock .question-type {
+  font-size: 0.76rem;
+  padding: 0.28rem 0.58rem;
+}
+
+.compact-timer {
+  margin-top: 0;
+  padding: 0.15rem 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.compact-timer .timer-track {
+  margin-top: 0;
+  height: 8px;
+}
+
+.battle-question-dock h3 {
+  margin: 0;
+  font-size: clamp(1.08rem, 4.1vw, 1.45rem);
+  line-height: 1.12;
+  color: #fff9e8;
+}
+
+.battle-hint-banner {
+  background: rgba(158, 228, 255, 0.14);
+  border: 1px solid rgba(102, 203, 255, 0.5);
+  color: #d9f5ff;
+  border-radius: 12px;
+  padding: 0.42rem 0.55rem;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.battle-options-grid {
+  gap: 0.45rem;
+}
+
+.battle-options-grid .answer-btn {
+  min-height: 58px;
+  padding: 0.58rem 0.55rem;
+  border-radius: 16px;
+  font-size: clamp(0.98rem, 4.2vw, 1.18rem);
+}
+
+.compact-typed-answer-form {
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+}
+
+.typed-answer-input {
+  min-height: 50px;
+  font-size: 1rem;
+}
+
+.compact-submit-btn {
+  min-width: 4rem;
+  min-height: 50px;
+  padding: 0.55rem 0.85rem;
+}
+
+.battle-victory-panel {
+  flex: 0 0 auto;
+  padding: 1rem 0.2rem 0;
+}
+
+@media (max-width: 860px) {
+  .battle-boss-focus {
+    grid-template-columns: minmax(0, 1fr) 148px;
+  }
+
+  .battle-boss-sprite .keeper-sprite {
+    transform: scale(0.96);
+  }
+}
+
+@media (max-width: 700px) {
+  .battle-card.battle-viewport {
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
+
+  .battle-scene-panel {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 0.92fr);
+  }
+
+  .battle-boss-focus {
+    padding: 0.7rem 0.72rem 0.55rem;
+    grid-template-columns: minmax(0, 1fr) 130px;
+    gap: 0.45rem;
+  }
+
+  .battle-boss-copy h2 {
+    font-size: clamp(1.35rem, 6vw, 1.9rem);
+  }
+
+  .battle-boss-copy p {
+    font-size: 0.84rem;
+  }
+
+  .battle-duel-floor {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.5rem;
+  }
+
+  .battle-player-presence .player-character {
+    transform: scale(0.74);
+  }
+
+  .battle-question-dock {
+    padding: 0.65rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .battle-card.battle-viewport {
+    gap: 0.45rem;
+  }
+
+  .battle-essentials {
+    gap: 0.32rem;
+  }
+
+  .battle-mini-stat {
+    padding: 0.34rem 0.4rem;
+  }
+
+  .battle-mini-stat strong,
+  .battle-boss-healthcard strong {
+    font-size: 0.82rem;
+  }
+
+  .battle-round-chip,
+  .battle-score-chip,
+  .question-count {
+    min-width: 2.8rem;
+    min-height: 1.7rem;
+    font-size: 0.66rem;
+  }
+
+  .battle-topline .pause-btn {
+    min-width: 2.55rem;
+    min-height: 2.55rem;
+  }
+
+  .battle-scene-panel {
+    gap: 0.45rem;
+  }
+
+  .battle-boss-focus {
+    grid-template-columns: minmax(0, 1fr) 108px;
+    padding: 0.62rem 0.62rem 0.45rem;
+  }
+
+  .battle-boss-healthcard {
+    padding: 0.5rem 0.58rem;
+  }
+
+  .battle-boss-sprite .keeper-sprite {
+    transform: scale(0.82);
+  }
+
+  .battle-duel-floor {
+    grid-template-columns: 94px minmax(0, 1fr);
+    padding: 0.42rem;
+  }
+
+  .battle-player-presence {
+    padding: 0.45rem 0.35rem;
+  }
+
+  .battle-player-presence .player-character {
+    transform: scale(0.62);
+  }
+
+  .battle-scene-center {
+    padding: 0.45rem;
+    grid-template-rows: auto auto 28px minmax(50px, 1fr);
+  }
+
+  .battle-scene-feedback {
+    padding: 0.45rem;
+    font-size: 0.76rem;
+  }
+
+  .battle-question-topline {
+    align-items: flex-start;
+  }
+
+  .battle-question-meta {
+    gap: 0.25rem;
+  }
+
+  .battle-question-dock h3 {
+    font-size: clamp(1rem, 5.5vw, 1.22rem);
+  }
+
+  .battle-options-grid .answer-btn {
+    min-height: 52px;
+    font-size: 0.92rem;
+  }
+
+  .answer-index {
+    width: 1.3rem;
+    height: 1.3rem;
+    font-size: 0.78rem;
+  }
+}

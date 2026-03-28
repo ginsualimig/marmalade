@@ -34,57 +34,70 @@ export function PlayerCharacter({
       role="img"
       aria-label="Your character"
     >
-      {/* Shoes */}
-      <div className={`shoe left ${outfit.shoes || "sneaker"}`} />
-      <div className={`shoe right ${outfit.shoes || "sneaker"}`} />
-
-      {/* Pants */}
-      <div className={`pants ${outfit.pants || "short"}`} />
-
-      {/* Shirt/Body */}
-      <div className={`shirt ${outfit.shirt || "solid"}`} />
-
-      {/* Arms */}
-      <div className="arm left" />
-      <div className="arm right" />
-
-      {/* Neck */}
-      <div className="neck" />
-
-      {/* Head */}
-      <div className="head">
-        {/* Ears */}
-        <div className="ear left" />
-        <div className="ear right" />
-
-        {/* Eyes */}
-        <div className="eye left">
-          <div className="pupil" />
-          <div className="shine" />
-        </div>
-        <div className="eye right">
-          <div className="pupil" />
-          <div className="shine" />
-        </div>
-
-        {/* Nose */}
-        <div className="nose" />
-
-        {/* Mouth */}
-        <div className="mouth" />
-
-        {/* Cheeks */}
-        <div className="cheek left" />
-        <div className="cheek right" />
-      </div>
-
-      {/* Hat */}
-      {outfit.hat && (
-        <div className={`hat ${outfit.hat}`} />
-      )}
-
-      {/* Glow/aura effect */}
+      <div className="character-shadow" />
       <div className="character-glow" />
+      <div className="character-spark spark-1" />
+      <div className="character-spark spark-2" />
+      <div className="character-spark spark-3" />
+      <div className="toy-platform" />
+
+      <div className="body-wrap">
+        {/* Shoes */}
+        <div className={`shoe left ${outfit.shoes || "sneaker"}`} />
+        <div className={`shoe right ${outfit.shoes || "sneaker"}`} />
+
+        {/* Pants */}
+        <div className={`pants ${outfit.pants || "short"}`} />
+
+        {/* Shirt/Body */}
+        <div className={`shirt ${outfit.shirt || "solid"}`}>
+          <div className="shirt-badge" />
+        </div>
+
+        {/* Arms */}
+        <div className="arm left"><div className="hand" /></div>
+        <div className="arm right"><div className="hand" /></div>
+
+        {/* Neck */}
+        <div className="neck" />
+
+        {/* Head */}
+        <div className="head">
+          <div className="hair" />
+          <div className="forelock" />
+          <div className="eyebrow left" />
+          <div className="eyebrow right" />
+
+          {/* Ears */}
+          <div className="ear left" />
+          <div className="ear right" />
+
+          {/* Eyes */}
+          <div className="eye left">
+            <div className="pupil" />
+            <div className="shine" />
+          </div>
+          <div className="eye right">
+            <div className="pupil" />
+            <div className="shine" />
+          </div>
+
+          {/* Nose */}
+          <div className="nose" />
+
+          {/* Mouth */}
+          <div className="mouth"><div className="tongue" /></div>
+
+          {/* Cheeks */}
+          <div className="cheek left" />
+          <div className="cheek right" />
+        </div>
+
+        {/* Hat */}
+        {outfit.hat && (
+          <div className={`hat ${outfit.hat}`} />
+        )}
+      </div>
     </div>
   );
 }

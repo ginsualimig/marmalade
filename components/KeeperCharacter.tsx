@@ -38,32 +38,42 @@ export function KeeperCharacter({
       role="img"
       aria-label={`The Keeper of Patience (${phase === "critical" ? "final challenge" : phase.replace('-', ' ')})`}
     >
-      {/* Keeper's Glowing Aura */}
+      <div className="keeper-floor-glow" />
       <div className="keeper-glow" />
+      <div className="keeper-halo-ring" />
+      <div className="keeper-orbit orb-1" />
+      <div className="keeper-orbit orb-2" />
+      <div className="keeper-orbit orb-3" />
+      <div className="keeper-pedestal" />
 
-      {/* Keeper's Crown: Silver/gold circlet of wisdom */}
-      <div className="keeper-crown" />
+      <div className="keeper-body">
+        <div className="keeper-crown" />
+        <div className="keeper-brow left" />
+        <div className="keeper-brow right" />
 
-      {/* Keeper's Face: Warm, expressive, observant */}
-      <div className="keeper-face">
-        {/* Eyes: Calm but observant */}
-        <div className="keeper-eye left">
-          <div className="keeper-eye-shine" />
+        <div className="keeper-face">
+          <div className="keeper-cheek left" />
+          <div className="keeper-cheek right" />
+          <div className="keeper-eye left">
+            <div className="keeper-eye-shine" />
+          </div>
+          <div className="keeper-eye right">
+            <div className="keeper-eye-shine" />
+          </div>
+          <div className="keeper-nose" />
+          <div className="keeper-mouth" />
+          <div className="keeper-beard" />
         </div>
-        <div className="keeper-eye right">
-          <div className="keeper-eye-shine" />
-        </div>
 
-        {/* Mouth: Gentle, kind expression */}
-        <div className="keeper-mouth" />
+        <div className="keeper-hand left"><div className="keeper-palm" /></div>
+        <div className="keeper-hand right"><div className="keeper-palm" /></div>
+        <div className="keeper-sleeve left" />
+        <div className="keeper-sleeve right" />
+        <div className="keeper-robe">
+          <div className="keeper-robe-trim" />
+          <div className="keeper-robe-gem" />
+        </div>
       </div>
-
-      {/* Keeper's Hands: Open and steady, never clenched */}
-      <div className="keeper-hand left" />
-      <div className="keeper-hand right" />
-
-      {/* Keeper's Robe: Flowing, ancient, grounded */}
-      <div className="keeper-robe" />
     </div>
   );
 }

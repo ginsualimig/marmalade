@@ -1,21 +1,20 @@
-# Marmalade: Mythic Monster Quiz Showdown
+# Marmalade: Keeper Quiz Challenge (Phase 1)
 
 A simplified, kid-friendly quiz battler built with Next.js for web/Vercel deployment.
 
-## Core gameplay
+## Phase 1 gameplay focus
 
-- Start screen with both bosses.
-- Battle Moonlight Manticore Lyra first, then Starwhirl Kraken Orion.
-- Every turn is an educational challenge:
+- Single encounter format: **The Keeper of Patience**.
+- Each turn is an educational challenge:
   - **Word skills**: phonics, spelling patterns, vocabulary, and word building.
   - **Maths**: number sense through upper-primary arithmetic/problem-solving.
-- Correct answer = damage boss.
+- Correct answer = player deals damage.
 - Wrong answer = player takes damage.
-- Includes clear victory and game-over flow.
+- Includes full run flow: start, battle, and learning summary.
 
 ## Curriculum mapping
 
-Singapore-aligned curriculum data now lives in `lib/game/curriculum.ts`.
+Singapore-aligned curriculum data lives in `lib/game/curriculum.ts`.
 
 It provides:
 - Stage progression from **K1 → Primary 6**
@@ -28,6 +27,11 @@ It provides:
   - `comet` → **P5-P6**
 
 The current page imports `MODE_CONFIG_FROM_CURRICULUM`, so other implementation lanes can consume the same curriculum source without broad UI changes.
+
+## Phase 2+ notes
+
+- Multi-boss progression and expanded story arcs are intentionally deferred.
+- Legacy boss-rush/alternate-boss artifacts may still exist in non-live/internal modules and should be treated as future-lane material unless explicitly reactivated.
 
 ## Run locally
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlayerCharacter, KeeperCharacter, GoldBurstParticle, BluePuffParticle, ArenaEnvironment } from "@/components/CharacterVisuals";
+import { PlayerCharacter, KeeperCharacter, GoldBurstParticle, BluePuffParticle } from "@/components/CharacterVisuals";
 import {
   clearHighScores,
   clearPreferredLevel,
@@ -59,7 +59,8 @@ import {
 import {
   MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS,
   MODE_CURRICULUM_CLUSTERS,
-  STAGE_CURRICULUM
+  STAGE_CURRICULUM,
+  type StageId
 } from "@/lib/game/curriculum";
 import {
   getAttackClasses,
@@ -255,6 +256,58 @@ const LEVEL_TUNING: Record<LearnerLevel, LevelTuning> = {
   }
 };
 
+type StageMathProfile = {
+  max: number;
+  allowSubtraction: boolean;
+  allowMissingNumber: boolean;
+  multiplicationBaseMax: number;
+  multiplicationFactorMax: number;
+  allowTwoStep: boolean;
+};
+
+type CuratedQuestionPlan = {
+  openerRounds: number;
+  mathBias: number;
+  wordVariants: number[];
+  typedChanceMultiplier: number;
+  earlyMathSequence: Array<"add-subtract" | "missing-number" | "multiplication" | "two-step">;
+};
+
+const STAGE_MATH_PROFILES: Record<StageId, StageMathProfile> = {
+  k1: { max: 6, allowSubtraction: false, allowMissingNumber: false, multiplicationBaseMax: 0, multiplicationFactorMax: 0, allowTwoStep: false },
+  k2: { max: 12, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 0, multiplicationFactorMax: 0, allowTwoStep: false },
+  p1: { max: 20, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 0, multiplicationFactorMax: 0, allowTwoStep: false },
+  p2: { max: 30, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 5, multiplicationFactorMax: 5, allowTwoStep: false },
+  p3: { max: 45, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 8, multiplicationFactorMax: 8, allowTwoStep: true },
+  p4: { max: 70, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 10, multiplicationFactorMax: 9, allowTwoStep: true },
+  p5: { max: 90, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 12, multiplicationFactorMax: 10, allowTwoStep: true },
+  p6: { max: 120, allowSubtraction: true, allowMissingNumber: true, multiplicationBaseMax: 12, multiplicationFactorMax: 12, allowTwoStep: true }
+};
+
+const CURATED_PLANS: Record<DifficultyMode, CuratedQuestionPlan> = {
+  sprout: {
+    openerRounds: 8,
+    mathBias: 0.55,
+    wordVariants: [0, 1, 2, 4],
+    typedChanceMultiplier: 0.6,
+    earlyMathSequence: ["add-subtract", "missing-number", "add-subtract", "missing-number", "add-subtract", "add-subtract", "missing-number", "add-subtract"]
+  },
+  spark: {
+    openerRounds: 10,
+    mathBias: 0.6,
+    wordVariants: [0, 2, 4, 5],
+    typedChanceMultiplier: 0.7,
+    earlyMathSequence: ["add-subtract", "missing-number", "add-subtract", "multiplication", "add-subtract", "missing-number", "multiplication", "add-subtract", "two-step", "multiplication"]
+  },
+  comet: {
+    openerRounds: 10,
+    mathBias: 0.65,
+    wordVariants: [0, 2, 5],
+    typedChanceMultiplier: 0.9,
+    earlyMathSequence: ["add-subtract", "multiplication", "missing-number", "add-subtract", "multiplication", "two-step", "add-subtract", "multiplication", "two-step", "missing-number"]
+  }
+};
+
 const pick = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
 const alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
 
@@ -294,9 +347,9 @@ const asTyped = (question: Omit<Question, "inputMode">): Question => ({
   placeholder: question.typeLabel === "Maths" ? "Type a number" : "Type your answer"
 });
 
-const withInputMode = (question: Omit<Question, "inputMode">, level: LearnerLevel): Question => {
+const withInputMode = (question: Omit<Question, "inputMode">, level: LearnerLevel, typedChanceMultiplier = 1): Question => {
   const typedAllowed = question.correct.length <= 16;
-  if (typedAllowed && Math.random() < LEVEL_TUNING[level].typedChance) {
+  if (typedAllowed && Math.random() < LEVEL_TUNING[level].typedChance * typedChanceMultiplier) {
     return asTyped(question);
   }
   return { ...question, inputMode: "choice" };
@@ -311,96 +364,115 @@ const normalizeAnswer = (question: Question, value: string) => {
   return trimmed.toLowerCase();
 };
 
-function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level: LearnerLevel): Question {
-  const word = pick(config.spellingWords);
+function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, round: number, stageId: StageId): Question {
   const tuning = LEVEL_TUNING[level];
-  const variantPool = tuning.allowUnscramble ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4];
-  const variant = pick(variantPool);
+  const plan = CURATED_PLANS[mode];
+  const stageWords = STAGE_CURRICULUM[stageId].sampleLexicon;
+  const wordPool = (stageWords.length ? stageWords : config.spellingWords)
+    .filter((word) => mode === "sprout" || word.length >= 5);
+  const word = pick(wordPool.length ? wordPool : config.spellingWords);
+  const variantPool = tuning.allowUnscramble
+    ? plan.wordVariants
+    : plan.wordVariants.filter((variant) => variant !== 5);
+  const variant = round < plan.openerRounds ? variantPool[round % variantPool.length] : pick(variantPool);
 
   if (variant === 0) {
-    const blankIndex = Math.max(1, Math.min(word.length - 2, Math.floor(Math.random() * word.length)));
+    const blankIndex = Math.max(1, Math.min(word.length - 2, Math.floor(Math.random() * (word.length - 1))));
     const correct = word[blankIndex];
     const promptWord = `${word.slice(0, blankIndex)}_${word.slice(blankIndex + 1)}`;
     const distractors = alphabet.filter((letter) => letter !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-missing-letter", prompt: `Letter detective! Fill the missing letter: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level);
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-missing-letter", prompt: `Letter detective! Fill the missing letter: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level, plan.typedChanceMultiplier);
   }
 
   if (variant === 1) {
     const correct = word[0];
     const distractors = alphabet.filter((letter) => letter !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-beginning-sound", prompt: `Which letter starts "${word}"?`, correct, options: uniqueOptions(correct, distractors) }, level);
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-beginning-sound", prompt: `Which letter starts "${word}"?`, correct, options: uniqueOptions(correct, distractors) }, level, plan.typedChanceMultiplier);
   }
 
   if (variant === 2) {
-    const endingLength = mode === "comet" && word.length > 7 ? 4 : 2;
+    const endingLength = mode === "comet" && word.length > 7 ? 4 : Math.min(3, Math.max(2, Math.floor(word.length / 3)));
     const correct = word.slice(-endingLength);
     const stem = word.slice(0, -endingLength);
     const distractors = SPELLING_ENDINGS[mode].filter((x) => x !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-word-ending", prompt: `Word builder: complete ${stem}${"_".repeat(endingLength)}`, correct, options: uniqueOptions(correct, distractors) }, level);
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-word-ending", prompt: `Word builder: complete ${stem}${"_".repeat(endingLength)}`, correct, options: uniqueOptions(correct, distractors) }, level, plan.typedChanceMultiplier);
   }
 
   if (variant === 3) {
     const letters = word.length;
     const distractors = [letters + 1, Math.max(2, letters - 1), letters + 2].map(String);
-    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-letter-count", prompt: `How many letters are in "${word}"?`, correct: String(letters), options: uniqueOptions(String(letters), distractors) }, level);
+    return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-letter-count", prompt: `How many letters are in "${word}"?`, correct: String(letters), options: uniqueOptions(String(letters), distractors) }, level, plan.typedChanceMultiplier);
   }
 
   if (variant === 4) {
     const vowels = ["a", "e", "i", "o", "u"];
-    const vowelIndex = word.split("").findIndex((char) => vowels.includes(char));
+    const vowelIndex = word.split("").findIndex((char, index) => index > 0 && vowels.includes(char));
     if (vowelIndex > 0) {
       const correct = word[vowelIndex];
       const promptWord = `${word.slice(0, vowelIndex)}_${word.slice(vowelIndex + 1)}`;
       const distractors = vowels.filter((v) => v !== correct).sort(() => Math.random() - 0.5).slice(0, 3);
-      return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-vowel-sound", prompt: `Pick the vowel to finish this word: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level);
+      return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-vowel-sound", prompt: `Pick the vowel to finish this word: ${promptWord}`, correct, options: uniqueOptions(correct, distractors) }, level, plan.typedChanceMultiplier);
     }
   }
 
   const scrambled = word.split("").sort(() => Math.random() - 0.5).join("");
-  const distractors = config.spellingWords.filter((w) => w !== word).sort(() => Math.random() - 0.5).slice(0, 3);
-  return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-unscramble", prompt: `Unscramble this word: ${scrambled}`, correct: word, options: uniqueOptions(word, distractors) }, level);
+  const distractors = wordPool.filter((w) => w !== word).sort(() => Math.random() - 0.5).slice(0, 3);
+  return withInputMode({ typeLabel: "Spelling", skillArea: "spelling-unscramble", prompt: `Unscramble this word: ${scrambled}`, correct: word, options: uniqueOptions(word, distractors) }, level, plan.typedChanceMultiplier);
 }
 
-function createMathQuestion(boss: Boss, config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, bossPhase: BossPhase = "phase-1"): Question {
+function createMathQuestion(
+  boss: Boss,
+  config: ModeConfig,
+  mode: DifficultyMode,
+  level: LearnerLevel,
+  round: number,
+  bossPhase: BossPhase = "phase-1",
+  stageId: StageId
+): Question {
   const tuning = LEVEL_TUNING[level];
-  // Boss phase scaling: add difficulty shift for later phases
-  const phaseShift = bossPhase === "phase-1" ? 0 : bossPhase === "phase-2" ? 1 : bossPhase === "phase-3" ? 2 : 3;
-  const max = Math.max(6, config.mathMax + tuning.mathShift + phaseShift);
+  const plan = CURATED_PLANS[mode];
+  const profile = STAGE_MATH_PROFILES[stageId];
+  const phaseShift = bossPhase === "phase-1" ? 0 : bossPhase === "phase-2" ? 2 : bossPhase === "phase-3" ? 4 : 6;
+  const max = Math.max(6, Math.min(config.mathMax + 24, profile.max + tuning.mathShift + phaseShift));
   const a = Math.floor(Math.random() * max) + 1;
   const b = Math.floor(Math.random() * max) + 1;
+  const curatedType = round < plan.openerRounds ? plan.earlyMathSequence[round % plan.earlyMathSequence.length] : null;
+  const shouldUseMultiplication = profile.multiplicationBaseMax >= 2 && (curatedType === "multiplication" || (curatedType === null && mode !== "sprout" && Math.random() < tuning.multiplicationChance));
+  const shouldUseTwoStep = profile.allowTwoStep && config.allowTwoStepMath && (curatedType === "two-step" || (curatedType === null && Math.random() < tuning.twoStepChance));
+  const shouldUseMissingNumber = profile.allowMissingNumber && (curatedType === "missing-number" || (curatedType === null && Math.random() > 0.66));
 
-  if (mode !== "sprout" && Math.random() < tuning.multiplicationChance) {
-    const base = Math.max(2, Math.floor(max / 2));
-    const x = Math.floor(Math.random() * base) + 2;
-    const y = Math.floor(Math.random() * (level === "expert" ? 8 : 6)) + 2;
+  if (shouldUseMultiplication) {
+    const x = Math.floor(Math.random() * Math.max(2, profile.multiplicationBaseMax - 1)) + 2;
+    const y = Math.floor(Math.random() * Math.max(2, profile.multiplicationFactorMax - 1)) + 2;
     const result = x * y;
-    const distractors = [result + y, Math.max(0, result - y), result + 2].map(String);
-    return withInputMode({ typeLabel: "Maths", skillArea: "math-multiplication", prompt: `${boss.name} says: ${x} × ${y} = ?`, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
+    const distractors = [result + y, Math.max(0, result - y), result + Math.max(2, x - 1)].map(String);
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-multiplication", prompt: `${boss.name} says: ${x} × ${y} = ?`, correct: String(result), options: uniqueOptions(String(result), distractors) }, level, plan.typedChanceMultiplier);
   }
 
-  if (config.allowTwoStepMath && Math.random() < tuning.twoStepChance) {
-    const c = Math.floor(Math.random() * Math.max(4, Math.floor(max / 2))) + 1;
+  if (shouldUseTwoStep) {
+    const c = Math.floor(Math.random() * Math.max(4, Math.floor(max / 3))) + 1;
     const plusFirst = Math.random() > 0.5;
-    const result = plusFirst ? a + b - c : a + c - b;
-    const prompt = plusFirst ? `Step quest: (${a} + ${b}) - ${c} = ?` : `Step quest: (${a} + ${c}) - ${b} = ?`;
+    const result = plusFirst ? a + b - c : a + c - Math.min(a + c - 1, b);
+    const prompt = plusFirst ? `Step quest: (${a} + ${b}) - ${c} = ?` : `Step quest: (${a} + ${c}) - ${Math.min(a + c - 1, b)} = ?`;
     const distractors = [result + 1, Math.max(0, result - 2), result + 3].map(String);
-    return withInputMode({ typeLabel: "Maths", skillArea: "math-two-step", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-two-step", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level, plan.typedChanceMultiplier);
   }
 
-  if (Math.random() > 0.66) {
+  if (shouldUseMissingNumber) {
     const total = a + b;
     const missingLeft = Math.random() > 0.5;
     const prompt = missingLeft ? `? + ${b} = ${total}` : `${a} + ? = ${total}`;
     const correct = missingLeft ? a : b;
     const distractors = [correct + 1, Math.max(0, correct - 1), correct + 2].map(String);
-    return withInputMode({ typeLabel: "Maths", skillArea: "math-missing-number", prompt, correct: String(correct), options: uniqueOptions(String(correct), distractors) }, level);
+    return withInputMode({ typeLabel: "Maths", skillArea: "math-missing-number", prompt, correct: String(correct), options: uniqueOptions(String(correct), distractors) }, level, plan.typedChanceMultiplier);
   }
 
-  const usePlus = Math.random() > 0.35;
-  const result = usePlus ? a + b : Math.max(0, a - Math.min(a, b));
-  const prompt = usePlus ? `${a} + ${b} = ?` : `${a} - ${Math.min(a, b)} = ?`;
+  const usePlus = !profile.allowSubtraction || Math.random() > 0.35;
+  const subtractionValue = Math.min(a, b);
+  const result = usePlus ? a + b : Math.max(0, a - subtractionValue);
+  const prompt = usePlus ? `${a} + ${b} = ?` : `${a} - ${subtractionValue} = ?`;
   const distractors = [result + 1, Math.max(0, result - 1), result + 2].map(String);
-  return withInputMode({ typeLabel: "Maths", skillArea: "math-add-subtract", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level);
+  return withInputMode({ typeLabel: "Maths", skillArea: "math-add-subtract", prompt, correct: String(result), options: uniqueOptions(String(result), distractors) }, level, plan.typedChanceMultiplier);
 }
 
 /**
@@ -418,13 +490,16 @@ function createQuestion(
   autonomyMode: "maths" | "words" | "mix" = "mix",
   _diagnostics?: RunDiagnostics
 ): Question {
-  // Autonomy mode weighting: how likely to pick maths vs words
+  const plan = CURATED_PLANS[mode];
+  const stageId = getSelectedStageId(mode, level);
   const isMathsRound =
     autonomyMode === "maths" ? true :
     autonomyMode === "words" ? false :
-    Math.random() < 0.5; // "mix" mode: 50/50
+    Math.random() < plan.mathBias;
 
-  return isMathsRound ? createMathQuestion(boss, config, mode, level, bossPhase) : createSpellingQuestion(config, mode, level);
+  return isMathsRound
+    ? createMathQuestion(boss, config, mode, level, round, bossPhase, stageId)
+    : createSpellingQuestion(config, mode, level, round, stageId);
 }
 
 const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
@@ -847,6 +922,19 @@ export default function Page() {
     speak(`Welcome, ${customizedCharacter.name}! Ready for your quest?`, "start");
   };
 
+  const quickStartAdventure = () => {
+    const defaultHero = createCharacter("Hero", "girl");
+    setCharacter(defaultHero);
+    saveCharacter(defaultHero);
+    setCharNameInput(defaultHero.name);
+    setCharGender(defaultHero.gender);
+    setCharAppearance(defaultHero.appearance);
+    setScreen("title");
+    setTimeout(() => {
+      startGame();
+    }, 0);
+  };
+
   const editCharacter = () => {
     if (character) {
       setCharNameInput(character.name);
@@ -971,7 +1059,7 @@ export default function Page() {
     setBattle(checkpoint);
     setResult(null);
     setScreen("battle");
-    setPhaseBanner("Retry Boss");
+    setPhaseBanner("Retry Keeper");
     setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
@@ -979,7 +1067,7 @@ export default function Page() {
     if (settings.persistProgress) {
       persistRunProgress(checkpoint, checkpoint, mode, level);
     }
-    speak("Checkpoint loaded. Try that boss again!", "start");
+    speak("Checkpoint loaded. Try that Keeper challenge again!", "start");
   };
 
   const finishRun = (runResult: "victory" | "game-over", finalBattle: BattleState) => {
@@ -1010,7 +1098,7 @@ export default function Page() {
     }
 
     if (runResult === "victory") {
-      speak("Legendary win! Every boss cleared.", "victory");
+      speak("Legendary win! You completed the Keeper challenge.", "victory");
     } else {
       speak("Good effort! Recharge and try another run.", "wrong");
     }
@@ -1222,9 +1310,9 @@ export default function Page() {
       // Phase transition feedback
       if (phaseChanged) {
         const phaseMessages = {
-          "phase-2": "🔥 You're getting stronger! Boss enters Phase 2!",
-          "phase-3": "⚡ Incredible focus! Boss enters Phase 3 - final stand!",
-          "critical": "💥 One last push! Boss is nearly defeated!"
+          "phase-2": "🔥 You're getting stronger! Keeper enters Phase 2!",
+          "phase-3": "⚡ Incredible focus! Keeper enters Phase 3 - final stand!",
+          "critical": "💥 One last push! The Keeper is nearly defeated!"
         };
         setPhaseBanner(phaseMessages[nextPhase]);
       } else {
@@ -1237,6 +1325,7 @@ export default function Page() {
           bossHp: 0,
           round: nextRound,
           feedback: `${currentBoss.taunts.defeated} ${battle.question.typeLabel === "Spelling" ? "You used awesome word power!" : "Your maths power-up was perfect!"}`,
+          feedbackData: undefined,
           phase: "boss-defeated",
           lastHit: "boss",
           bossPhase: nextPhase,
@@ -1252,7 +1341,7 @@ export default function Page() {
           }
         };
         setBattle(defeatedBattle);
-        setPhaseBanner("Boss Defeated!");
+        setPhaseBanner("Keeper Defeated!");
         if (settings.persistProgress) {
           persistRunProgress(defeatedBattle, checkpoint, mode, level);
         }
@@ -1266,6 +1355,7 @@ export default function Page() {
         round: nextRound,
         question: createQuestion(currentBoss, nextRound, config, mode, level, nextPhase, autonomyMode, diagnostics ?? undefined),
         feedback: buildCorrectFeedback(currentBoss, battle.question, newBossHp, config),
+        feedbackData: undefined,
         lastHit: "boss",
         bossPhase: nextPhase,
         phaseSwitchNotification: phaseChanged ? `Entering ${nextPhase}` : undefined,
@@ -1313,104 +1403,55 @@ export default function Page() {
   }, [questionTimeLeft, screen, battle.phase, questionTimerKey]);
 
   return (
-    <main className="page-wrap">
-      <section className="card title-card">
-        <div className="title-hero">
-          <span className="title-kicker">✨ Kid Quest Arena ✨</span>
-          <h1>Marmalade: Mythic Monster Quiz Showdown</h1>
-          <p>Bright battle arena with illustrated heroes, voice cues, and kid-friendly mythic monster adventures.</p>
-          <div className="title-badges" aria-hidden>
-            <span>🎨 Storybook Art</span>
-            <span>🧠 Spelling + Maths</span>
-            <span>🏆 Boss Battles</span>
-          </div>
-        </div>
-      </section>
+    <main className={`page-wrap ${screen === "battle" ? "battle-shell" : ""}`}>
+      {screen !== "battle" && (
+        <>
+          <section className="card title-card">
+            <div className="title-hero">
+              <span className="title-kicker">✨ Kid Quest Arena ✨</span>
+              <h1>Marmalade: Keeper Quiz Challenge</h1>
+              <p>Bright battle arena with illustrated heroes, voice cues, and one focused Keeper challenge for Phase 1.</p>
+              <div className="title-badges" aria-hidden>
+                <span>🎨 Storybook Art</span>
+                <span>🧠 Spelling + Maths</span>
+                <span>👑 Keeper Challenge</span>
+              </div>
+            </div>
+          </section>
 
-      <section className="card voice-card" aria-live="polite">
-        <strong>Coach Comet says:</strong>
-        <p>{voiceLine}</p>
-      </section>
+          <section className="card voice-card" aria-live="polite">
+            <strong>Coach Comet says:</strong>
+            <p>{voiceLine}</p>
+          </section>
+        </>
+      )}
 
       {screen === "onboarding" && (
         <section className="card onboarding-section center-stack">
-          <h2>How to Play (Visual Guide)</h2>
-          <div className="onboarding-carousel">
-            {/* Screen 1: Meet the Hero */}
-            <div className="onboarding-screen active">
-              <div className="onboarding-visual" aria-hidden>
-                <div className="onboarding-emoji" style={{ fontSize: "6rem" }}>🧙‍♂️</div>
-              </div>
-              <h3>You are the Hero!</h3>
-              <p>Create your character and step into the arena. Pick your outfit and gear up for battle.</p>
-              <div className="onboarding-cues">
-                <span>👖 Customize clothes</span>
-                <span>🎨 Choose colors</span>
-                <span>🏆 Battle starts</span>
+          <div className="onboarding-screen active">
+            <div className="onboarding-visual" aria-hidden>
+              <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", alignItems: "center", margin: "1rem 0", flexWrap: "wrap" }}>
+                <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>🦸‍♀️</div>
+                <div style={{ fontSize: "2rem" }}>⚡</div>
+                <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>📚</div>
+                <div style={{ fontSize: "2rem" }}>⚡</div>
+                <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>🧙</div>
               </div>
             </div>
-
-            {/* Screen 2: Answer Questions = Deal Damage */}
-            <div className="onboarding-screen">
-              <div className="onboarding-visual" aria-hidden>
-                <div style={{ display: "flex", gap: "2rem", justifyContent: "center", alignItems: "center", margin: "1rem 0" }}>
-                  <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>❓</div>
-                  <div style={{ fontSize: "2rem" }}>⚡</div>
-                  <div className="onboarding-emoji" style={{ fontSize: "5rem" }}>👹</div>
-                </div>
-              </div>
-              <h3>Answer Wins Battles</h3>
-              <p>The boss asks spelling and maths questions. Get it right = you attack! Get it wrong = boss hits back.</p>
-              <div className="onboarding-cues">
-                <span>✅ Correct → Damage boss</span>
-                <span>❌ Wrong → Lose HP</span>
-              </div>
-            </div>
-
-            {/* Screen 3: Boss Phases */}
-            <div className="onboarding-screen">
-              <div className="onboarding-visual" aria-hidden>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", margin: "1rem 0" }}>
-                  <div>
-                    <div style={{ fontSize: "3rem", marginBottom: "0.5rem" }}>1️⃣</div>
-                    <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>Easy</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "3rem", marginBottom: "0.5rem" }}>⚡</div>
-                    <div style={{ fontSize: "0.9rem", opacity: 0.8 }}>Hard</div>
-                  </div>
-                </div>
-              </div>
-              <h3>Boss Gets Tougher</h3>
-              <p>As the boss loses health, questions get harder and faster. Stay focused and you&apos;ll win!</p>
-              <div className="onboarding-cues">
-                <span>📊 3 phases + critical</span>
-                <span>🚀 Difficulty scales up</span>
-              </div>
-            </div>
-
-            {/* Screen 4: Win = Next Boss */}
-            <div className="onboarding-screen">
-              <div className="onboarding-visual" aria-hidden>
-                <div style={{ display: "flex", gap: "1rem", justifyContent: "center", margin: "1rem 0", fontSize: "4rem" }}>
-                  <span>👹</span>
-                  <span style={{ fontSize: "2rem", opacity: 0.6 }}>→</span>
-                  <span>🐉</span>
-                  <span style={{ fontSize: "2rem", opacity: 0.6 }}>→</span>
-                  <span>🏆</span>
-                </div>
-              </div>
-              <h3>Face the Keeper</h3>
-              <p>Stay calm through one full Keeper battle. Every correct answer builds power and moves you toward the final victory summary.</p>
-              <div className="onboarding-cues">
-                <span>🏆 1 story boss</span>
-                <span>⭐ Earn power levels</span>
-              </div>
+            <h2>Jump straight in</h2>
+            <p>Your hero is ready. Tap once and the Keeper will ask Question 1 right away.</p>
+            <div className="onboarding-cues">
+              <span>⚡ Instant start</span>
+              <span>🧠 Default to mixed questions</span>
+              <span>🎨 Customize later if you want</span>
             </div>
           </div>
 
-          <button className="big-btn" onClick={() => setScreen("character-creation")}>
-            I&apos;m Ready to Play! 🎮
+          <button className="big-btn" onClick={quickStartAdventure}>
+            Play Now
+          </button>
+          <button className="ghost-btn" onClick={() => setScreen("character-creation")}>
+            Customize Hero First
           </button>
         </section>
       )}
@@ -1505,9 +1546,11 @@ export default function Page() {
             <button
               className="big-btn"
               onClick={completeCharacterCreation}
-              disabled={!charNameInput.trim() && charNameInput.length === 0}
             >
-              Create My Hero
+              Save Hero & Continue
+            </button>
+            <button className="ghost-btn" onClick={quickStartAdventure}>
+              Skip for Now
             </button>
           </div>
         </section>
@@ -1626,7 +1669,7 @@ export default function Page() {
               </label>
               <label className="settings-toggle">
                 <input type="checkbox" checked={true} onChange={() => {}} />
-                Boss Dialogue
+                Keeper Dialogue
               </label>
               <label className="settings-toggle">
                 <input type="checkbox" checked={true} onChange={() => {}} />
@@ -1784,7 +1827,7 @@ export default function Page() {
                     speak(msg, "start");
                   }}
                 >
-                  <option value="mix">Mix (50/50)</option>
+                  <option value="mix">Mix (adaptive blend)</option>
                   <option value="maths">Maths focus</option>
                   <option value="words">Words focus</option>
                 </select>
@@ -1847,164 +1890,141 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card keeper-encounter ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
+        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
-          
-          <div className="battle-top-controls" role="toolbar" aria-label="Battle controls">
-            <button className="pause-btn" onClick={() => setScreen("title")} title="Pause and return to title">
-              ⏸️ Pause
+
+          <div className="battle-top-controls battle-topline" role="toolbar" aria-label="Battle controls">
+            <div className="battle-essentials stripped-hud-rails" aria-label="Health status">
+              <div className="battle-hp-rail battle-hp-rail-player" aria-label={`Hero HP ${battle.playerHp} out of ${config.playerMaxHp}`}>
+                <span className="hp-emoji" aria-hidden>🦸</span>
+                <div className="bar mini-bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
+              </div>
+              <div className="battle-hp-rail battle-hp-rail-boss" aria-label={`Keeper HP ${battle.bossHp} out of ${config.bossMaxHp}`}>
+                <div className="bar enemy mini-bar"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
+                <span className="hp-emoji" aria-hidden>👹</span>
+              </div>
+            </div>
+            <button className="pause-btn battle-pause-pill" onClick={() => setScreen("title")} title="Pause and return to title" aria-label="Pause">
+              ⏸
             </button>
           </div>
           <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
 
-          <div className="hud-row">
-            <div className="hud-box">
-              <strong>Hero HP {battle.playerHp}/{config.playerMaxHp}</strong>
-              <div className="bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
-              <div className="lives-indicator" aria-label={`Lives remaining: ${battle.stats.livesRemaining}`}>
-                {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
-                  <span key={i} className={`life-heart ${i < battle.stats.livesRemaining ? "active" : "empty"}`}>
-                    {i < battle.stats.livesRemaining ? "❤️" : "🖤"}
-                  </span>
-                ))}
+          <div className="battle-scene-layout">
+            <div className="battle-scene-panel">
+              <div className="battle-boss-focus">
+                <div className="battle-boss-status">
+                  <div className="battle-boss-copy">
+                    <span className="battle-scene-kicker">Keeper encounter</span>
+                    <h2>{currentBoss.name}</h2>
+                    <p>{currentBoss.taunts.intro}</p>
+                  </div>
+                  <div className="battle-boss-healthcard">
+                    <span className="mini-stat-label">Keeper HP</span>
+                    <strong>{battle.bossHp}/{config.bossMaxHp}</strong>
+                    <div className="bar enemy battle-scene-bar"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
+                  </div>
+                </div>
+
+                <div className={`boss-sprite battle-boss-sprite ${getSpriteAnimationClass("boss", attackMode, attackMode === "hero")}`}>
+                  <KeeperCharacter
+                    phase={battle.bossPhase}
+                    animated={attackMode === "boss"}
+                    size="large"
+                  />
+                  <div className="sprite-label">Keeper</div>
+                  {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
+                </div>
               </div>
-            </div>
-            <div className="hud-box">
-              <strong>{currentBoss.name} HP {battle.bossHp}/{config.bossMaxHp}</strong>
-              <div className="bar enemy"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
-              <div className="phase-indicator" aria-label={`Boss phase: ${battle.bossPhase}`}>
-                Phase: <strong>{battle.bossPhase === "phase-1" ? "1️⃣" : battle.bossPhase === "phase-2" ? "2️⃣" : battle.bossPhase === "phase-3" ? "3️⃣" : "⚡"}</strong>
+
+              <div className="battle-duel-floor">
+                <div className={`hero-sprite battle-player-presence ${getSpriteAnimationClass("hero", attackMode, attackMode === "boss")}`}>
+                  {character ? (
+                    <PlayerCharacter
+                      outfit={{
+                        hat: character.appearance.hat,
+                        shirt: character.appearance.shirt,
+                        pants: character.appearance.pants,
+                        shoes: character.appearance.shoes
+                      }}
+                      animated={attackMode === "hero"}
+                      size="large"
+                    />
+                  ) : (
+                    <div className="hero-portrait" aria-hidden>
+                      <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
+                    </div>
+                  )}
+                  <div className="sprite-label">{character?.name ?? "You"}</div>
+                  <div className="battle-player-meta">
+                    <div className="battle-lives-strip" aria-label={`Lives remaining: ${battle.stats.livesRemaining}`}>
+                      {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
+                        <span key={i} className={`life-heart ${i < battle.stats.livesRemaining ? "active" : "empty"}`}>
+                          {i < battle.stats.livesRemaining ? "❤️" : "🖤"}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="battle-player-health">
+                      <span className="mini-stat-label">Hero HP</span>
+                      <div className="bar battle-scene-bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
+                    </div>
+                  </div>
+                  {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
+                </div>
+
+                <div className="battle-scene-center">
+                  <div className="battle-skill-pill battle-scene-skill-pill" aria-live="polite">
+                    <span>{SKILL_LABELS[battle.question.skillArea]}</span>
+                    <strong>{powerLevels[battle.question.skillArea] ? getPowerLevelStage(powerLevels[battle.question.skillArea].level) : "novice"}</strong>
+                  </div>
+                  <div className="power-level-bar compact-power-level battle-scene-power">
+                    <div className="power-fill" style={{ width: `${powerLevels[battle.question.skillArea]?.level ?? 0}%` }} />
+                  </div>
+                  <div className="projectile-lane compact-projectile battle-scene-projectile" aria-hidden>
+                    {shouldShowProjectile(attackMode) && (
+                      <div className={`projectile ${getProjectileType(attackMode)}`} />
+                    )}
+                    {shouldShowImpactBurst(attackMode) && (
+                      <div className={`impact-burst ${getImpactBurstPosition(attackMode)}`} />
+                    )}
+                  </div>
+                  {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
+                    <div className="battle-feedback-slot battle-scene-feedback">
+                      <WrongAnswerFeedback feedback={battle.feedbackData} />
+                    </div>
+                  ) : (
+                    <p className="feedback compact-feedback battle-scene-feedback">{battle.feedback}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-          
-          {/* Power Level Display */}
-          <div className="power-level-hud">
-            <div className="power-level-row">
-              <span className="skill-label">{battle.question.skillArea.replace(/-/g, " ")}</span>
-              <div className="power-level-bar">
-                {powerLevels[battle.question.skillArea] && (
-                  <>
-                    <div className="power-fill" style={{ width: `${powerLevels[battle.question.skillArea].level}%` }} />
-                    <span className="power-stage">{getPowerLevelStage(powerLevels[battle.question.skillArea].level)}</span>
-                  </>
-                ) || (
-                  <>
-                    <div className="power-fill" style={{ width: "0%" }} />
-                    <span className="power-stage">novice</span>
-                  </>
+
+              <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 100 }}>
+                {particles.map((particle) =>
+                  particle.type === "gold-burst" ? (
+                    <GoldBurstParticle key={particle.id} x={particle.x} y={particle.y} count={8} />
+                  ) : (
+                    <BluePuffParticle key={particle.id} x={particle.x} y={particle.y} count={6} />
+                  )
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="battle-stage">
-            <div className="arena-container left">
-              <ArenaEnvironment />
-            </div>
-
-            <div className="versus-badge" aria-hidden>VS</div>
-
-            <div className={`hero-sprite ${getSpriteAnimationClass("hero", attackMode, attackMode === "boss")}`}>
-              {character ? (
-                <PlayerCharacter
-                  outfit={{
-                    hat: character.appearance.hat,
-                    shirt: character.appearance.shirt,
-                    pants: character.appearance.pants,
-                    shoes: character.appearance.shoes
-                  }}
-                  animated={attackMode === "hero"}
-                  size="large"
-                />
-              ) : (
-                <div className="hero-portrait" aria-hidden>
-                  <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
+            {battle.phase === "quiz" ? (
+              <div className="quiz-panel battle-quiz-panel battle-question-dock" role="group" aria-label={`${battle.question.typeLabel} question`}>
+                <div className="question-header compact-question-header battle-question-topline">
+                  <div className="question-type">{battle.question.typeLabel} · {battle.question.inputMode === "typed" ? "Type" : "Pick"}</div>
+                  <div className="battle-question-meta">
+                    <span className="battle-round-chip">Q{battle.round + 1}</span>
+                    <div className="question-count">{timerCritical ? "HURRY" : `${Math.max(0, questionTimeLeft)}s`}</div>
+                  </div>
                 </div>
-              )}
-              <div className="sprite-label">{character?.name ?? "You"}</div>
-              {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
-            </div>
-
-            <div className="projectile-lane" aria-hidden>
-              {shouldShowProjectile(attackMode) && (
-                <div className={`projectile ${getProjectileType(attackMode)}`} />
-              )}
-              {shouldShowImpactBurst(attackMode) && (
-                <div className={`impact-burst ${getImpactBurstPosition(attackMode)}`} />
-              )}
-            </div>
-
-            <div className={`boss-sprite ${getSpriteAnimationClass("boss", attackMode, attackMode === "hero")}`}>
-              <KeeperCharacter
-                phase={battle.bossPhase}
-                animated={attackMode === "boss"}
-                size="large"
-              />
-              <div className="sprite-label">The Keeper of Patience</div>
-              {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
-            </div>
-            
-            {/* Particle effects container */}
-            <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 100 }}>
-              {particles.map((particle) =>
-                particle.type === "gold-burst" ? (
-                  <GoldBurstParticle key={particle.id} x={particle.x} y={particle.y} count={8} />
-                ) : (
-                  <BluePuffParticle key={particle.id} x={particle.x} y={particle.y} count={6} />
-                )
-              )}
-            </div>
-
-            <div className="arena-container right">
-              <ArenaEnvironment />
-            </div>
-          </div>
-
-          <div className="boss-stage">
-            <div>
-              <h2>The Keeper of Patience</h2>
-              <p>Guardian of the Tome of Growing Knowledge. Test your wisdom.</p>
-              {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
-                <WrongAnswerFeedback feedback={battle.feedbackData} />
-              ) : (
-                <p className="feedback">{battle.feedback}</p>
-              )}
-            </div>
-            <div className="score">Score {score}</div>
-          </div>
-
-          {battle.phase === "quiz" ? (
-            <div className="quiz-panel" role="group" aria-label={`${battle.question.typeLabel} question`}>
-              <div className="question-header">
-                <div className="question-type">{battle.question.typeLabel} Challenge · {battle.question.inputMode === "typed" ? "Type" : "Pick one"}</div>
-                <div className="question-count">Question {battle.round + 1}</div>
-              </div>
-              <div className={`question-timer ${timerUrgent ? "urgent" : ""} ${timerCritical ? "critical" : ""}`} role="timer" aria-live="assertive" aria-label={getTimerAriaLabel(Math.max(0, questionTimeLeft), timerUrgency)}>
-                <div className="timer-top-row">
-                  <strong>⏱️ {Math.max(0, questionTimeLeft)}s</strong>
-                  <span>{timerCritical ? "HURRY!" : timerUrgent ? "Quick answer" : "60-second challenge"}</span>
+                <div className={`question-timer compact-timer ${timerUrgent ? "urgent" : ""} ${timerCritical ? "critical" : ""}`} role="timer" aria-live="assertive" aria-label={getTimerAriaLabel(Math.max(0, questionTimeLeft), timerUrgency)}>
+                  <div className="timer-track"><span style={{ width: `${timerPercent}%` }} /></div>
                 </div>
-                <div className="timer-track"><span style={{ width: `${timerPercent}%` }} /></div>
-              </div>
-              <h3>{battle.question.prompt}</h3>
-              {currentHintText && (
-                <div style={{ 
-                  backgroundColor: "#f0f9ff", 
-                  border: "2px solid #3498db", 
-                  borderRadius: "8px", 
-                  padding: "1em", 
-                  marginBottom: "1em",
-                  color: "#2c3e50",
-                  fontWeight: 500
-                }}>
-                  {currentHintText}
-                </div>
-              )}
-              {battle.question.inputMode === "choice" ? (
-                <>
-                  <p className="question-hint" aria-hidden>Tap one big answer button below:</p>
-                  <div className="options-grid">
+                <h3>{battle.question.prompt}</h3>
+                {currentHintText && <div className="battle-hint-banner">{currentHintText}</div>}
+                {battle.question.inputMode === "choice" ? (
+                  <div className="options-grid battle-options-grid">
                     {battle.question.options.map((option, idx) => (
                       <button
                         key={option}
@@ -2017,34 +2037,34 @@ export default function Page() {
                       </button>
                     ))}
                   </div>
-                </>
-              ) : (
-                <form
-                  className="typed-answer-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!typedAnswer.trim()) return;
-                    answer(typedAnswer);
-                  }}
-                >
-                  <input
-                    className="typed-answer-input"
-                    value={typedAnswer}
-                    onChange={(e) => setTypedAnswer(e.target.value)}
-                    placeholder={battle.question.placeholder ?? "Type your answer"}
-                    aria-label="Type your answer"
-                    autoComplete="off"
-                  />
-                  <button type="submit" className="big-btn">Submit Answer</button>
-                </form>
-              )}
-            </div>
-          ) : (
-            <div className="center-stack">
-              <h3>{currentBoss.name} is down!</h3>
-              <button className="big-btn" onClick={nextBoss}>{battle.bossIndex < BOSSES.length - 1 ? "Next Boss" : "Finish Adventure"}</button>
-            </div>
-          )}
+                ) : (
+                  <form
+                    className="typed-answer-form compact-typed-answer-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!typedAnswer.trim()) return;
+                      answer(typedAnswer);
+                    }}
+                  >
+                    <input
+                      className="typed-answer-input"
+                      value={typedAnswer}
+                      onChange={(e) => setTypedAnswer(e.target.value)}
+                      placeholder={battle.question.placeholder ?? "Type your answer"}
+                      aria-label="Type your answer"
+                      autoComplete="off"
+                    />
+                    <button type="submit" className="big-btn compact-submit-btn">Go</button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <div className="center-stack battle-victory-panel">
+                <h3>{currentBoss.name} is down!</h3>
+                <button className="big-btn" onClick={nextBoss}>{battle.bossIndex < BOSSES.length - 1 ? "Continue" : "Finish Adventure"}</button>
+              </div>
+            )}
+          </div>
         </section>
       )}
 
@@ -2061,7 +2081,7 @@ export default function Page() {
             <div><strong>Timeouts</strong><span>{timeoutAnswers}</span></div>
             <div><strong>Spelling wins</strong><span>{battle.stats.spellingCorrect}</span></div>
             <div><strong>Maths wins</strong><span>{battle.stats.mathsCorrect}</span></div>
-            <div><strong>Bosses defeated</strong><span>{battle.stats.bossesDefeated}/{BOSSES.length}</span></div>
+            <div><strong>Keeper challenge cleared</strong><span>{battle.stats.bossesDefeated}/{BOSSES.length}</span></div>
             <div><strong>Best streak</strong><span>{battle.stats.maxStreak}</span></div>
           </div>
           <p className="level-badge">{learningLevel}</p>
@@ -2178,7 +2198,7 @@ export default function Page() {
 
           <div className="summary-actions">
             <button className="big-btn" onClick={startGame}>Replay Same Mode</button>
-            {result === "game-over" && checkpoint && <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Last Boss</button>}
+            {result === "game-over" && checkpoint && <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Keeper Challenge</button>}
             <button className="ghost-btn" onClick={() => setScreen("title")}>Back to Title</button>
           </div>
 
