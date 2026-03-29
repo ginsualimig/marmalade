@@ -194,6 +194,80 @@ const BOSSES: Boss[] = [
 ];
 
 
+
+type TierDefinition = {
+  name: string;
+  minScore: number;
+  description: string;
+  icon: string;
+  bonus: number;
+};
+
+const TIER_CONFIGS: TierDefinition[] = [
+  {
+    name: "Novice",
+    minScore: 0,
+    description: "First sparks of brilliant answers",
+    icon: "🌱",
+    bonus: 15
+  },
+  {
+    name: "Apprentice",
+    minScore: 201,
+    description: "Steady progress through Keeper questions",
+    icon: "✨",
+    bonus: 35
+  },
+  {
+    name: "Warrior",
+    minScore: 501,
+    description: "Sharpening battle focus",
+    icon: "⚔️",
+    bonus: 55
+  },
+  {
+    name: "Champion",
+    minScore: 901,
+    description: "Combo confidence unlocked",
+    icon: "🏅",
+    bonus: 85
+  },
+  {
+    name: "Master",
+    minScore: 1400,
+    description: "Keeper’s trusted hero",
+    icon: "🌟",
+    bonus: 120
+  }
+];
+
+type ComboMilestone = {
+  threshold: number;
+  label: string;
+  bonus: number;
+};
+
+const COMBO_MILESTONES: ComboMilestone[] = [
+  { threshold: 10, label: "UNSTOPPABLE COMBO", bonus: 120 },
+  { threshold: 5, label: "INCREDIBLE COMBO", bonus: 70 }
+];
+
+const getTierForScore = (score: number): TierDefinition => {
+  let current = TIER_CONFIGS[0];
+  for (const tier of TIER_CONFIGS) {
+    if (score >= tier.minScore) {
+      current = tier;
+    } else {
+      break;
+    }
+  }
+  return current;
+};
+
+const getNextTier = (score: number): TierDefinition | null => {
+  return TIER_CONFIGS.find((tier) => tier.minScore > score) ?? null;
+};
+
 const MODE_DECOR: Record<DifficultyMode, { icon: string; badge: string }> = {
   sprout: { icon: "🌱", badge: "Gentle Start" },
   spark: { icon: "⚡", badge: "Balanced Quest" },
@@ -778,6 +852,11 @@ export default function Page() {
   const [attackMode, setAttackMode] = useState<"none" | "hero" | "boss">("none");
   const [damagePop, setDamagePop] = useState<{ target: "boss" | "player"; amount: number } | null>(null);
   const [phaseBanner, setPhaseBanner] = useState<string | null>(null);
+  const [tierBanner, setTierBanner] = useState<string | null>(null);
+  const [comboBanner, setComboBanner] = useState<string | null>(null);
+  const [comboBonus, setComboBonus] = useState<number>(0);
+  const tierAnnouncedRef = useRef<string>(TIER_CONFIGS[0].name);
+  const previousStreakRef = useRef<number>(0);
   const [typedAnswer, setTypedAnswer] = useState<string>("");
   const [result, setResult] = useState<"victory" | "game-over" | null>(null);
   const [voiceLine, setVoiceLine] = useState<string>("Pick a mode and begin your bright quiz quest!");
@@ -809,6 +888,14 @@ export default function Page() {
     const hpBonus = Math.floor((battle.playerHp / config.playerMaxHp) * 100);
     return defeated + correctScore + streakBonus + hpBonus;
   }, [battle.playerHp, battle.stats, config.playerMaxHp]);
+  const currentTier = useMemo(() => getTierForScore(score), [score]);
+  const nextTier = useMemo(() => getNextTier(score), [score]);
+  const tierProgress = useMemo(() => {
+    if (!nextTier) return 1;
+    const range = nextTier.minScore - currentTier.minScore;
+    if (range <= 0) return 1;
+    return Math.min(1, Math.max(0, (score - currentTier.minScore) / range));
+  }, [score, currentTier, nextTier]);
 
   const totalAnswered = battle.stats.correctAnswers + battle.stats.wrongAnswers;
   const accuracy = totalAnswered > 0 ? Math.round((battle.stats.correctAnswers / totalAnswered) * 100) : 0;
@@ -867,6 +954,17 @@ export default function Page() {
   }, [mode, level, settings.persistDifficulty]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    const themeClasses = ["mode-sprout", "mode-spark", "mode-comet"];
+    const currentClass = `mode-${mode}`;
+    document.body.classList.remove(...themeClasses);
+    document.body.classList.add(currentClass);
+    return () => {
+      document.body.classList.remove(currentClass);
+    };
+  }, [mode]);
+
+  useEffect(() => {
     if (attackMode === "none") return;
     const t = setTimeout(() => setAttackMode("none"), 700);
     return () => clearTimeout(t);
@@ -883,6 +981,39 @@ export default function Page() {
     const t = setTimeout(() => setPhaseBanner(null), 1400);
     return () => clearTimeout(t);
   }, [phaseBanner]);
+
+  useEffect(() => {
+    const previousTier = tierAnnouncedRef.current;
+    if (currentTier.name !== previousTier) {
+      tierAnnouncedRef.current = currentTier.name;
+      setTierBanner(`${currentTier.name} unlocked! +${currentTier.bonus} bonus points!`);
+    }
+  }, [currentTier]);
+
+  useEffect(() => {
+    if (!tierBanner) return;
+    const t = setTimeout(() => setTierBanner(null), 1800);
+    return () => clearTimeout(t);
+  }, [tierBanner]);
+
+  useEffect(() => {
+    const previousStreak = previousStreakRef.current;
+    const currentStreak = battle.stats.streak;
+    previousStreakRef.current = currentStreak;
+    for (const milestone of COMBO_MILESTONES) {
+      if (currentStreak >= milestone.threshold && previousStreak < milestone.threshold) {
+        setComboBanner(`${milestone.label} x${milestone.threshold}!`);
+        setComboBonus(milestone.bonus);
+        break;
+      }
+    }
+  }, [battle.stats.streak]);
+
+  useEffect(() => {
+    if (!comboBanner) return;
+    const t = setTimeout(() => setComboBanner(null), 1400);
+    return () => clearTimeout(t);
+  }, [comboBanner]);
 
   useEffect(() => {
     if (screen !== "battle" || battle.phase !== "quiz") return;
@@ -1890,8 +2021,23 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")}`}>
+        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")} mode-${mode}`}>
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
+          {(tierBanner || comboBanner) && (
+            <div className="reward-banners" role="status" aria-live="assertive">
+              {tierBanner && (
+                <div className="reward-banner tier-banner">
+                  <span>{tierBanner}</span>
+                </div>
+              )}
+              {comboBanner && (
+                <div className="reward-banner combo-banner">
+                  <strong>{comboBanner}</strong>
+                  <span className="combo-bonus">+{comboBonus} pts!</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="battle-top-controls battle-topline" role="toolbar" aria-label="Battle controls">
             <div className="battle-essentials stripped-hud-rails" aria-label="Health status">
@@ -1904,28 +2050,54 @@ export default function Page() {
                 <span className="hp-emoji" aria-hidden>👹</span>
               </div>
             </div>
+            <div className="rank-hud battle-rank-hud" aria-live="polite" aria-label={`Tier ${currentTier.name}`}>
+              <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
+              <div className="rank-body">
+                <div className="rank-top-row">
+                  <strong className="rank-name">{currentTier.name}</strong>
+                  <span className="rank-score">{score} pts</span>
+                </div>
+                <p className="rank-description">{currentTier.description}</p>
+                {nextTier ? (
+                  <div className="rank-next">
+                    <span className="rank-next-label">Next: {nextTier.name} · {nextTier.minScore} pts</span>
+                    <div className="rank-progress-track">
+                      <span style={{ width: `${tierProgress * 100}%` }} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rank-next">
+                    <span className="rank-max">Top tier</span>
+                    <div className="rank-progress-track">
+                      <span style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             <button className="pause-btn battle-pause-pill" onClick={() => setScreen("title")} title="Pause and return to title" aria-label="Pause">
               ⏸
             </button>
           </div>
           <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
 
-          <div className="battle-scene-layout">
-            <div className="battle-scene-panel">
-              <div className="battle-boss-focus">
-                <div className="battle-boss-status">
-                  <div className="battle-boss-copy">
-                    <span className="battle-scene-kicker">Keeper encounter</span>
-                    <h2>{currentBoss.name}</h2>
-                    <p>{currentBoss.taunts.intro}</p>
-                  </div>
-                  <div className="battle-boss-healthcard">
-                    <span className="mini-stat-label">Keeper HP</span>
-                    <strong>{battle.bossHp}/{config.bossMaxHp}</strong>
-                    <div className="bar enemy battle-scene-bar"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
-                  </div>
+          <div className="battle-stage-shell">
+            <div className="boss-stage" role="presentation">
+              <div className="boss-stage-header">
+                <div className="battle-boss-copy">
+                  <span className="battle-scene-kicker">Keeper arena</span>
+                  <h2>{currentBoss.name}</h2>
+                  <p>{currentBoss.taunts.intro}</p>
                 </div>
+                <div className="battle-boss-healthcard">
+                  <span className="mini-stat-label">Keeper HP</span>
+                  <strong>{battle.bossHp}/{config.bossMaxHp}</strong>
+                  <div className="bar enemy battle-scene-bar"><span style={{ width: `${(battle.bossHp / config.bossMaxHp) * 100}%` }} /></div>
+                </div>
+              </div>
 
+              <div className="boss-stage-body">
+                <div className="boss-stage-glow" aria-hidden />
                 <div className={`boss-sprite battle-boss-sprite ${getSpriteAnimationClass("boss", attackMode, attackMode === "hero")}`}>
                   <KeeperCharacter
                     phase={battle.bossPhase}
@@ -1935,82 +2107,78 @@ export default function Page() {
                   <div className="sprite-label">Keeper</div>
                   {damagePop?.target === "boss" && <div className="damage-pop">-{damagePop.amount}</div>}
                 </div>
+                <div className="stage-projectile-lane" aria-hidden>
+                  {shouldShowProjectile(attackMode) && (
+                    <div className={`projectile ${getProjectileType(attackMode)}`} />
+                  )}
+                  {shouldShowImpactBurst(attackMode) && (
+                    <div className={`impact-burst ${getImpactBurstPosition(attackMode)}`} />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="player-secondary-panel">
+              <div className={`player-sprite-card ${getSpriteAnimationClass("hero", attackMode, attackMode === "boss")}`}>
+                {character ? (
+                  <PlayerCharacter
+                    outfit={{
+                      hat: character.appearance.hat,
+                      shirt: character.appearance.shirt,
+                      pants: character.appearance.pants,
+                      shoes: character.appearance.shoes
+                    }}
+                    animated={attackMode === "hero"}
+                    size="small"
+                  />
+                ) : (
+                  <div className="hero-portrait" aria-hidden>
+                    <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
+                  </div>
+                )}
+                <div className="sprite-label">{character?.name ?? "You"}</div>
+                {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
               </div>
 
-              <div className="battle-duel-floor">
-                <div className={`hero-sprite battle-player-presence ${getSpriteAnimationClass("hero", attackMode, attackMode === "boss")}`}>
-                  {character ? (
-                    <PlayerCharacter
-                      outfit={{
-                        hat: character.appearance.hat,
-                        shirt: character.appearance.shirt,
-                        pants: character.appearance.pants,
-                        shoes: character.appearance.shoes
-                      }}
-                      animated={attackMode === "hero"}
-                      size="large"
-                    />
-                  ) : (
-                    <div className="hero-portrait" aria-hidden>
-                      <div className="shape cape" /><div className="shape body" /><div className="shape head" /><div className="shape eye left" /><div className="shape eye right" /><div className="shape wand" />
-                    </div>
-                  )}
-                  <div className="sprite-label">{character?.name ?? "You"}</div>
-                  <div className="battle-player-meta">
-                    <div className="battle-lives-strip" aria-label={`Lives remaining: ${battle.stats.livesRemaining}`}>
-                      {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
-                        <span key={i} className={`life-heart ${i < battle.stats.livesRemaining ? "active" : "empty"}`}>
-                          {i < battle.stats.livesRemaining ? "❤️" : "🖤"}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="battle-player-health">
-                      <span className="mini-stat-label">Hero HP</span>
-                      <div className="bar battle-scene-bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
-                    </div>
-                  </div>
-                  {damagePop?.target === "player" && <div className="damage-pop">-{damagePop.amount}</div>}
+              <div className="player-secondary-metrics">
+                <div className="battle-lives-strip" aria-label={`Lives remaining: ${battle.stats.livesRemaining}`}>
+                  {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
+                    <span key={i} className={`life-heart ${i < battle.stats.livesRemaining ? "active" : "empty"}`}>
+                      {i < battle.stats.livesRemaining ? "❤️" : "🖤"}
+                    </span>
+                  ))}
                 </div>
+                <div className="battle-player-health">
+                  <span className="mini-stat-label">Hero HP</span>
+                  <div className="bar battle-scene-bar"><span style={{ width: `${(battle.playerHp / config.playerMaxHp) * 100}%` }} /></div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-                <div className="battle-scene-center">
+          <div className="battle-particles" aria-hidden>
+            {particles.map((particle) =>
+              particle.type === "gold-burst" ? (
+                <GoldBurstParticle key={particle.id} x={particle.x} y={particle.y} count={8} />
+              ) : (
+                <BluePuffParticle key={particle.id} x={particle.x} y={particle.y} count={6} />
+              )
+            )}
+          </div>
+
+          {battle.phase === "quiz" ? (
+            <>
+              <div className="stage-dimmer" aria-hidden />
+              <div className="question-overlay-card battle-quiz-panel battle-question-dock" role="group" aria-label={`${battle.question.typeLabel} question`}>
+                <div className="question-overlay-hud">
                   <div className="battle-skill-pill battle-scene-skill-pill" aria-live="polite">
                     <span>{SKILL_LABELS[battle.question.skillArea]}</span>
                     <strong>{powerLevels[battle.question.skillArea] ? getPowerLevelStage(powerLevels[battle.question.skillArea].level) : "novice"}</strong>
                   </div>
-                  <div className="power-level-bar compact-power-level battle-scene-power">
+                  <div className="power-level-bar overlay-power-level">
                     <div className="power-fill" style={{ width: `${powerLevels[battle.question.skillArea]?.level ?? 0}%` }} />
                   </div>
-                  <div className="projectile-lane compact-projectile battle-scene-projectile" aria-hidden>
-                    {shouldShowProjectile(attackMode) && (
-                      <div className={`projectile ${getProjectileType(attackMode)}`} />
-                    )}
-                    {shouldShowImpactBurst(attackMode) && (
-                      <div className={`impact-burst ${getImpactBurstPosition(attackMode)}`} />
-                    )}
-                  </div>
-                  {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
-                    <div className="battle-feedback-slot battle-scene-feedback">
-                      <WrongAnswerFeedback feedback={battle.feedbackData} />
-                    </div>
-                  ) : (
-                    <p className="feedback compact-feedback battle-scene-feedback">{battle.feedback}</p>
-                  )}
                 </div>
-              </div>
-
-              <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 100 }}>
-                {particles.map((particle) =>
-                  particle.type === "gold-burst" ? (
-                    <GoldBurstParticle key={particle.id} x={particle.x} y={particle.y} count={8} />
-                  ) : (
-                    <BluePuffParticle key={particle.id} x={particle.x} y={particle.y} count={6} />
-                  )
-                )}
-              </div>
-            </div>
-
-            {battle.phase === "quiz" ? (
-              <div className="quiz-panel battle-quiz-panel battle-question-dock" role="group" aria-label={`${battle.question.typeLabel} question`}>
                 <div className="question-header compact-question-header battle-question-topline">
                   <div className="question-type">{battle.question.typeLabel} · {battle.question.inputMode === "typed" ? "Type" : "Pick"}</div>
                   <div className="battle-question-meta">
@@ -2057,14 +2225,22 @@ export default function Page() {
                     <button type="submit" className="big-btn compact-submit-btn">Go</button>
                   </form>
                 )}
+                {battle.feedbackData && (battle.feedbackData.type === "wrong" || battle.feedbackData.type === "timeout") ? (
+                  <div className="battle-feedback-slot overlay-feedback">
+                    <WrongAnswerFeedback feedback={battle.feedbackData} />
+                  </div>
+                ) : (
+                  <p className="feedback overlay-feedback-text">{battle.feedback}</p>
+                )}
               </div>
-            ) : (
-              <div className="center-stack battle-victory-panel">
-                <h3>{currentBoss.name} is down!</h3>
-                <button className="big-btn" onClick={nextBoss}>{battle.bossIndex < BOSSES.length - 1 ? "Continue" : "Finish Adventure"}</button>
-              </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="center-stack battle-victory-panel">
+              <h3>{currentBoss.name} is down!</h3>
+              <button className="big-btn" onClick={nextBoss}>{battle.bossIndex < BOSSES.length - 1 ? "Continue" : "Finish Adventure"}</button>
+            </div>
+          )}
+
         </section>
       )}
 

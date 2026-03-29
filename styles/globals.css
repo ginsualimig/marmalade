@@ -43,6 +43,16 @@
   /* Monochrome (complete color blindness) safe: pure contrast ratios */
   --monochrome-light: #f0f0f0;
   --monochrome-dark: #1a1a1a;
+  --primary-button-start: #ffd700;
+  --primary-button-end: #d4af37;
+  --primary-button-text: #2c2416;
+  --primary-button-border: rgba(212, 165, 116, 0.15);
+  --primary-button-shadow: rgba(212, 175, 55, 0.25);
+  --ghost-button-bg: linear-gradient(135deg, rgba(245, 240, 232, 0.6), rgba(232, 213, 196, 0.5));
+  --ghost-button-border: rgba(212, 165, 116, 0.3);
+  --ghost-button-shadow: rgba(212, 165, 116, 0.15);
+  --player-health-gradient: linear-gradient(90deg, var(--color-keeper-primary), var(--color-correct-light));
+  --boss-health-gradient: linear-gradient(90deg, #0173b2, #0CADE8);
 }
 
 * { box-sizing: border-box; }
@@ -510,6 +520,190 @@ body {
   gap: 0.5rem;
 }
 
+
+.battle-stage-shell {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 0 1.25rem 4.5rem;
+  display: grid;
+  gap: 1rem;
+  position: relative;
+  z-index: 2;
+}
+
+.boss-stage {
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 1.4rem 1.6rem 1.6rem;
+  background: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.14), transparent 55%),
+    linear-gradient(180deg, rgba(18, 9, 52, 0.9), rgba(8, 4, 32, 0.95));
+  min-height: clamp(360px, 48vh, 520px);
+  display: grid;
+  gap: 1rem;
+  overflow: hidden;
+  box-shadow: 0 20px 45px rgba(6, 4, 25, 0.5);
+}
+
+.boss-stage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.boss-stage-body {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 1rem;
+  min-height: 280px;
+}
+
+.boss-stage-glow {
+  position: absolute;
+  inset: 12% 16% 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 218, 144, 0.45), rgba(255, 218, 144, 0.05));
+  filter: blur(24px);
+  opacity: 0.75;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.boss-stage-body .boss-sprite {
+  position: relative;
+  z-index: 1;
+}
+
+.stage-projectile-lane {
+  position: relative;
+  width: 100%;
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+
+.player-secondary-panel {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.player-sprite-card {
+  border-radius: 20px;
+  padding: 0.6rem 0.9rem 0.7rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: grid;
+  gap: 0.4rem;
+  align-items: center;
+  justify-items: center;
+  width: 160px;
+}
+
+.player-secondary-metrics {
+  flex: 1;
+  display: grid;
+  gap: 0.6rem;
+  min-width: 210px;
+}
+
+.battle-particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.stage-dimmer {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 5, 20, 0.65);
+  backdrop-filter: blur(6px) saturate(1.1);
+  transition: opacity 0.25s ease;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.question-overlay-card {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(2rem, 5vw, 3.25rem);
+  transform: translateX(-50%);
+  width: min(640px, 92vw);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(5, 8, 24, 0.92);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 35px 90px rgba(3, 2, 15, 0.7);
+  z-index: 10;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.question-overlay-hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.question-overlay-card .battle-skill-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.4rem 0.8rem;
+}
+
+.question-overlay-card .power-level-bar {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  height: 22px;
+  border-radius: 16px;
+}
+
+.overlay-feedback {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.overlay-feedback-text {
+  margin: 0;
+  color: #fff6d2;
+  text-align: center;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .player-secondary-panel {
+    flex-direction: column;
+  }
+  .player-sprite-card {
+    width: 130px;
+  }
+  .question-overlay-card {
+    width: min(90vw, 360px);
+    bottom: 1.2rem;
+  }
+  .question-overlay-hud {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 .hero-sprite,
 .boss-sprite {
   position: relative;
@@ -914,6 +1108,22 @@ body {
     right: auto;
     justify-content: flex-end;
     margin-bottom: 0.1rem;
+  }
+
+  .battle-card.immersive-battle .battle-rank-hud {
+    width: 100%;
+    min-width: auto;
+    max-width: none;
+    justify-content: space-between;
+  }
+
+  .battle-card.immersive-battle .reward-banners {
+    top: 5rem;
+    width: min(90vw, 320px);
+  }
+
+  .battle-card.immersive-battle .reward-banner {
+    font-size: 0.68rem;
   }
 
   .battle-card.immersive-battle .hud-row { order: 1; margin-bottom: 0.35rem; gap: 0.5rem; }
@@ -2286,7 +2496,10 @@ body.high-contrast-mode .bar {
   right: 1rem;
   z-index: 10;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.65rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .pause-btn {
@@ -2312,6 +2525,125 @@ body.high-contrast-mode .bar {
 
 .pause-btn:active {
   transform: translateY(0);
+}
+
+
+.battle-rank-hud {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 0.55rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(14, 11, 36, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 14px 28px rgba(4, 3, 12, 0.45);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+}
+.battle-rank-hud .rank-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.battle-rank-hud .rank-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+.battle-rank-hud .rank-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.battle-rank-hud .rank-name {
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.battle-rank-hud .rank-score {
+  font-size: 0.85rem;
+  color: #ffd66d;
+  font-weight: 600;
+}
+.battle-rank-hud .rank-description {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.battle-rank-hud .rank-next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.battle-rank-hud .rank-next-label,
+.battle-rank-hud .rank-max {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffdfe5;
+}
+.rank-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.rank-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffd66d, #ff7d1c);
+  transition: width 0.3s ease;
+}
+.reward-banners {
+  position: absolute;
+  top: 3.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  pointer-events: none;
+  z-index: 8;
+  width: min(80vw, 360px);
+}
+.reward-banner {
+  border-radius: 999px;
+  padding: 0.4rem 1.4rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+  text-align: center;
+  animation: rewardPop 1s ease forwards;
+  box-shadow: 0 18px 30px rgba(7, 5, 25, 0.6);
+}
+.tier-banner {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.75), rgba(255, 188, 84, 0.4));
+  color: #2d0f48;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+.combo-banner {
+  background: linear-gradient(145deg, rgba(255, 85, 85, 0.2), rgba(255, 197, 143, 0.15));
+  color: #ffdfe5;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.reward-banner strong {
+  font-size: 0.95rem;
+}
+.combo-bonus {
+  font-size: 0.7rem;
+  color: #ffe07f;
+  margin-left: 0.2rem;
+}
+@keyframes rewardPop {
+  0% { opacity: 0; transform: translateY(-12px) scale(0.9); }
+  20% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.95); }
 }
 
 /* Power Level HUD Enhancement */
@@ -2946,4 +3278,280 @@ body.high-contrast-mode .bar {
     width: 136px;
     height: 176px;
   }
+}
+
+/* Mode-specific UI tokens & immersive arenas */
+.big-btn {
+  background: linear-gradient(180deg, var(--primary-button-start), var(--primary-button-end));
+  color: var(--primary-button-text);
+  border: 2px solid var(--primary-button-border);
+  box-shadow: 0 4px 12px var(--primary-button-shadow);
+}
+
+.ghost-btn {
+  background: var(--ghost-button-bg);
+  border: 2px solid var(--ghost-button-border);
+  box-shadow: 0 4px 12px var(--ghost-button-shadow);
+}
+
+.ghost-btn:hover {
+  border-color: var(--ghost-button-border);
+  filter: brightness(1.05);
+}
+
+.pause-btn {
+  background: linear-gradient(135deg, var(--primary-button-start), var(--primary-button-end));
+  border-color: var(--primary-button-border);
+  box-shadow: 0 6px 16px var(--primary-button-shadow);
+  color: var(--primary-button-text);
+}
+
+.battle-card .bar span {
+  background: var(--player-health-gradient);
+}
+
+.battle-card .bar.enemy span {
+  background: var(--boss-health-gradient);
+}
+
+body.mode-sprout {
+  background: linear-gradient(180deg, #e6ffe0 0%, #b7e4a2 45%, #5aa96b 100%);
+  --contrast-text: #1b2f1c;
+  --contrast-dark: #0d1b0f;
+  --primary-button-start: #d5ffb5;
+  --primary-button-end: #66c67d;
+  --primary-button-text: #0f260e;
+  --primary-button-border: rgba(40, 105, 47, 0.55);
+  --primary-button-shadow: rgba(34, 91, 41, 0.35);
+  --ghost-button-bg: linear-gradient(135deg, rgba(220, 255, 234, 0.9), rgba(171, 236, 193, 0.4));
+  --ghost-button-border: rgba(67, 132, 73, 0.45);
+  --ghost-button-shadow: rgba(40, 95, 45, 0.2);
+  --player-health-gradient: linear-gradient(90deg, #c4ffb8, #5dc168);
+  --boss-health-gradient: linear-gradient(90deg, #3c8d48, #195925);
+}
+
+body.mode-spark {
+  background: linear-gradient(180deg, #fff4e9 0%, #ffd59d 45%, #c46b21 100%);
+  --contrast-text: #2f170a;
+  --contrast-dark: #1b0b05;
+  --primary-button-start: #ffda81;
+  --primary-button-end: #c86f24;
+  --primary-button-text: #2b1201;
+  --primary-button-border: rgba(168, 84, 28, 0.6);
+  --primary-button-shadow: rgba(144, 70, 20, 0.35);
+  --ghost-button-bg: linear-gradient(135deg, rgba(255, 233, 205, 0.9), rgba(230, 187, 131, 0.4));
+  --ghost-button-border: rgba(141, 63, 16, 0.45);
+  --ghost-button-shadow: rgba(128, 58, 13, 0.2);
+  --player-health-gradient: linear-gradient(90deg, #ffd796, #e49455);
+  --boss-health-gradient: linear-gradient(90deg, #a84d1f, #6c2a14);
+}
+
+body.mode-comet {
+  background:
+    radial-gradient(circle at 20% 30%, rgba(153, 144, 255, 0.45), transparent 50%),
+    radial-gradient(circle at 80% 15%, rgba(70, 165, 255, 0.35), transparent 45%),
+    linear-gradient(180deg, #08031a 0%, #120b34 40%, #050014 100%);
+  --contrast-text: #f6f6ff;
+  --contrast-dark: #d3ccff;
+  --primary-button-start: #bdb4ff;
+  --primary-button-end: #6b4dff;
+  --primary-button-text: #080113;
+  --primary-button-border: rgba(148, 116, 255, 0.45);
+  --primary-button-shadow: rgba(81, 48, 204, 0.45);
+  --ghost-button-bg: linear-gradient(135deg, rgba(84, 73, 185, 0.4), rgba(26, 9, 57, 0.7));
+  --ghost-button-border: rgba(142, 124, 255, 0.4);
+  --ghost-button-shadow: rgba(68, 47, 147, 0.45);
+  --player-health-gradient: linear-gradient(90deg, #d1c6ff, #7d52ff);
+  --boss-health-gradient: linear-gradient(90deg, #56a9ff, #2680ff);
+}
+
+body.mode-sprout .card {
+  border-color: rgba(43, 99, 52, 0.25);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(211, 255, 221, 0.55));
+}
+
+body.mode-spark .card {
+  border-color: rgba(142, 68, 22, 0.35);
+  background: linear-gradient(145deg, rgba(255, 250, 240, 0.9), rgba(242, 198, 135, 0.45));
+}
+
+body.mode-comet .card {
+  border-color: rgba(120, 94, 255, 0.28);
+  background: linear-gradient(145deg, rgba(16, 6, 54, 0.95), rgba(42, 16, 86, 0.85));
+}
+
+.battle-stage {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+.battle-stage > * {
+  position: relative;
+  z-index: 2;
+}
+
+.battle-stage::before {
+  content: "";
+  position: absolute;
+  inset: auto 6% 4% 6%;
+  border-radius: 50% / 45%;
+  pointer-events: none;
+  z-index: 0;
+  transform-origin: center;
+}
+
+.battle-card.mode-sprout {
+  background: linear-gradient(180deg, #e2ffe3 0%, #8bd185 40%, #2d6a39 100%);
+}
+
+.battle-card.mode-sprout::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 25% 22%, rgba(255, 255, 255, 0.65), transparent 52%),
+    radial-gradient(circle at 78% 15%, rgba(255, 255, 255, 0.2), transparent 45%);
+  opacity: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  z-index: 0;
+}
+
+.battle-card.mode-sprout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.6) 0 6px, transparent 8px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.33) 0 4px, transparent 5px);
+  background-size: 140px 140px, 90px 90px;
+  animation: sproutDrift 26s linear infinite;
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.battle-card.mode-spark {
+  background: linear-gradient(180deg, #fff6e9 0%, #f6c274 45%, #8f3f0f 100%);
+}
+
+.battle-card.mode-spark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent 40%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 3px, transparent 3px 12px),
+    radial-gradient(circle at 70% 60%, rgba(255, 224, 179, 0.5), transparent 55%);
+  opacity: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  z-index: 0;
+}
+
+.battle-card.mode-spark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.5) 0 4px, transparent 5px);
+  background-size: 120px 120px;
+  animation: sparkDust 18s linear infinite;
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.battle-card.mode-comet {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 42%),
+    radial-gradient(circle at 80% 20%, rgba(110, 148, 255, 0.25), transparent 45%),
+    linear-gradient(180deg, #08031a 0%, #120b34 40%, #09001a 100%);
+}
+
+.battle-card.mode-comet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 0 2px, transparent 4px),
+    radial-gradient(circle, rgba(194, 210, 255, 0.25) 0 3px, transparent 5px);
+  background-size: 100px 100px, 150px 150px;
+  animation: cometStars 30s linear infinite;
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.battle-card.mode-comet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.18), transparent 55%),
+    radial-gradient(circle at 30% 70%, rgba(89, 133, 255, 0.2), transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.battle-card.mode-sprout .battle-stage::before {
+  background:
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(180deg, rgba(47, 99, 44, 0.8), rgba(26, 58, 28, 0.95));
+  box-shadow: 0 20px 38px rgba(16, 45, 25, 0.6);
+  animation: sproutStageGlow 10s ease-in-out infinite;
+}
+
+.battle-card.mode-spark .battle-stage::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 12px, transparent 12px 32px),
+    linear-gradient(180deg, #a85b1d, #652c10);
+  box-shadow: 0 22px 42px rgba(48, 28, 5, 0.7);
+  animation: sparkStagePulse 12s ease-in-out infinite;
+}
+
+.battle-card.mode-comet .battle-stage::before {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.45), transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(88, 129, 255, 0.4), rgba(12, 3, 45, 0.95)),
+    linear-gradient(180deg, rgba(40, 15, 72, 0.9), rgba(5, 0, 22, 0.95));
+  box-shadow: 0 25px 45px rgba(4, 2, 19, 0.85);
+  animation: cometStagePulse 14s ease-in-out infinite;
+}
+
+@keyframes sproutDrift {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 180px 0, -140px 160px; }
+}
+
+@keyframes sparkDust {
+  0% { background-position: 0 0; opacity: 0.45; }
+  50% { background-position: -40px 20px; opacity: 0.7; }
+  100% { background-position: 80px -30px; opacity: 0.45; }
+}
+
+@keyframes cometStars {
+  0% { background-position: 0 0, 40px 80px; opacity: 0.6; }
+  50% { background-position: -60px 20px, 20px -40px; opacity: 0.85; }
+  100% { background-position: 120px -20px, -40px 60px; opacity: 0.6; }
+}
+
+@keyframes sproutStageGlow {
+  0% { transform: scale(0.98); opacity: 0.85; }
+  50% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(0.98); opacity: 0.85; }
+}
+
+@keyframes sparkStagePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+@keyframes cometStagePulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
 }
