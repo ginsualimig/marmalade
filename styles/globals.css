@@ -783,8 +783,8 @@ body {
 .stage-dimmer {
   position: absolute;
   inset: 0;
-  background: rgba(5, 5, 20, 0.65);
-  backdrop-filter: blur(6px) saturate(1.1);
+  background: rgba(5, 5, 20, 0.28);
+  backdrop-filter: blur(2px);
   transition: opacity 0.25s ease;
   z-index: 7;
   pointer-events: none;
@@ -799,9 +799,9 @@ body {
   padding: clamp(1rem, 3vw, 1.5rem);
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(5, 8, 24, 0.92);
-  backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: 0 35px 90px rgba(3, 2, 15, 0.7);
+  background: rgba(5, 8, 24, 0.88);
+  backdrop-filter: blur(4px) saturate(1.05);
+  box-shadow: 0 35px 90px rgba(3, 2, 15, 0.6);
   z-index: 10;
   display: grid;
   gap: 0.9rem;
