@@ -1058,8 +1058,31 @@ const getInitialState = () => {
   };
 };
 
+const HYDRATION_STATE_KEY = "__MARMALADE_INITIAL_STATE__";
+
+type InitialState = ReturnType<typeof getInitialState>;
+
+declare global {
+  interface Window {
+    __MARMALADE_INITIAL_STATE__?: InitialState;
+  }
+}
+
 export default function Page() {
-  const [initial] = useState(() => getInitialState());
+  const [initial] = useState<InitialState>(() => {
+    if (typeof window === "undefined") {
+      return getInitialState();
+    }
+    const stored = window.__MARMALADE_INITIAL_STATE__;
+    if (stored) {
+      delete window.__MARMALADE_INITIAL_STATE__;
+      return stored;
+    }
+    return getInitialState();
+  });
+
+  const isServer = typeof window === "undefined";
+  const serializedInitialState = useMemo(() => JSON.stringify(initial).replace(/</g, "\u003c"), [initial]);
 
   const [screen, setScreen] = useState<Screen>(initial.hasCharacter ? "title" : "onboarding");
   const [pinInput, setPinInput] = useState<string>("");
@@ -1074,7 +1097,7 @@ export default function Page() {
   const [summaries, setSummaries] = useState<RunSummary[]>(initial.summaries);
   const [character, setCharacter] = useState<CharacterState | null>(initial.character);
   const [resumeRun, setResumeRun] = useState<{ mode: DifficultyMode; level: LearnerLevel; battle: BattleState; checkpoint: BattleState | null } | null>(initial.resumeRun);
-  const [powerLevels, setPowerLevels] = useState<PowerLevelMap>(() => loadPowerLevels(initial.mode));
+  const [powerLevels, setPowerLevels] = useState<PowerLevelMap>({});
   
   // Character creation state
   const [charNameInput, setCharNameInput] = useState<string>("");
@@ -1116,12 +1139,12 @@ export default function Page() {
     x: number;
     y: number;
   }>>([]);
-  const initialSoundPrefs = useMemo(() => loadSoundPreferences(), []);
-  const [soundEnabled, setSoundEnabled] = useState(initialSoundPrefs.enabled);
-  const [volumeSetting, setVolumeSetting] = useState(initialSoundPrefs.volume);
+  const [soundEnabled, setSoundEnabled] = useState(DEFAULT_SOUND_PREFS.enabled);
+  const [volumeSetting, setVolumeSetting] = useState(DEFAULT_SOUND_PREFS.volume);
   const [audioPrimed, setAudioPrimed] = useState(false);
   const muteInitialRef = useRef(true);
   const volumeInitialRef = useRef(true);
+  const rehydratedRef = useRef(false);
   const [tierBurst, setTierBurst] = useState<TierBurst | null>(null);
   const tierBurstTimerRef = useRef<number | null>(null);
   const [celebrationShake, setCelebrationShake] = useState<{ id: number; type: CelebrationType } | null>(null);
@@ -1131,6 +1154,28 @@ export default function Page() {
   const bossDefeatTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   useEffect(() => {
+    if (rehydratedRef.current) return;
+    rehydratedRef.current = true;
+    const hydrated = getInitialState();
+    setScreen(hydrated.hasCharacter ? "title" : "onboarding");
+    setMode(hydrated.mode);
+    setAgeBand(hydrated.ageBand);
+    setLevel(hydrated.level);
+    setSettings(hydrated.settings);
+    setHighScores(hydrated.highScores);
+    setSummaries(hydrated.summaries);
+    setCharacter(hydrated.character);
+    setResumeRun(hydrated.resumeRun);
+    setBattle(hydrated.battle);
+    setCheckpoint(hydrated.checkpoint);
+    setPowerLevels(loadPowerLevels(hydrated.mode));
+    const soundPrefs = loadSoundPreferences();
+    setSoundEnabled(soundPrefs.enabled);
+    setVolumeSetting(soundPrefs.volume);
+  }, []);
+
+  useEffect(() => {
+    if (!rehydratedRef.current) return;
     saveSoundPreferences({ enabled: soundEnabled, volume: volumeSetting });
   }, [soundEnabled, volumeSetting]);
 
@@ -1345,6 +1390,25 @@ export default function Page() {
       : "Once accuracy stays strong, slightly speed up recall with short daily drills.",
     `If the learner is frustrated, temporarily step down from ${selectedStage.label} expectations and rebuild with ${selectedStage.questionBands[0]?.label.toLowerCase() ?? "foundational items"}.`
   ];
+  const summaryKeyStats = [
+    { label: "Score", value: `${score} pts` },
+    { label: "Accuracy", value: `${accuracy}%` },
+    { label: "Max combo", value: `${battle.stats.maxStreak}x` },
+    { label: "Bosses cleared", value: `${battle.stats.bossesDefeated}/${BOSSES.length}` }
+  ];
+  const summaryDetailStats = [
+    { label: "Correct", value: battle.stats.correctAnswers },
+    { label: "Mistakes", value: battle.stats.wrongAnswers },
+    { label: "Timeouts", value: timeoutAnswers },
+    { label: "Spelling wins", value: battle.stats.spellingCorrect },
+    { label: "Maths wins", value: battle.stats.mathsCorrect }
+  ];
+  const stageInterpretationShort = stageInterpretation.includes(".")
+    ? `${stageInterpretation.split(".")[0]}.`
+    : stageInterpretation;
+  const timeoutSignalShort = timeoutAnswers === 0
+    ? "No timeouts."
+    : `${timeoutAnswers} timeout${timeoutAnswers === 1 ? "" : "s"} (${timeoutRate}%)`;
   const summaryFallbackAppearance = {
     hat: APPEARANCE_OPTIONS.hat[0].id,
     shirt: APPEARANCE_OPTIONS.shirt[0].id,
@@ -2045,7 +2109,16 @@ export default function Page() {
   }, [questionTimeLeft, screen, battle.phase, questionTimerKey]);
 
   return (
-    <main className={`page-wrap ${screen === "battle" ? "battle-shell" : ""}`}>
+    <>
+      {isServer && (
+        <script
+          id="marmalade-initial-state"
+          dangerouslySetInnerHTML={{
+            __html: `window.${HYDRATION_STATE_KEY} = ${serializedInitialState};`
+          }}
+        />
+      )}
+      <main className={`page-wrap ${screen === "battle" ? "battle-shell" : ""}`}>
       {screen !== "battle" && (
         <>
           <section className="card title-card">
@@ -2823,47 +2896,48 @@ export default function Page() {
 
       {screen === "summary" && (
         <section className={`card center-stack end-card celebration summary-card ${result === "victory" ? "victory-summary" : result === "game-over" ? "defeat-summary" : ""}`}>
-          <div className="summary-hero">
-            {result === "victory" ? (
-              <div className="victory-hero">
-                <div className="victory-banner">Victory!</div>
-                <p className="victory-subtitle">Keeper down. Your streak, focus, and kindness won the arena.</p>
-                <div className="reaction-stage victory-stage" aria-hidden="true">
-                  <div className="keeper-stance">
-                    <KeeperCharacter phase="phase-3" size="small" className="keeper-reaction" />
-                    <p className="keeper-reaction-line">Well fought! The Keeper is proud of your steady kindness.</p>
-                  </div>
-                  <div className="player-stance">
-                    <PlayerCharacter outfit={summaryOutfit} size="small" className="player-reaction hero-victory" />
-                    <p className="player-reaction-line">Gold shimmer surrounds your victory pose.</p>
-                  </div>
+          <div className="summary-reaction-wrapper">
+            <div className={`reaction-stage ${result === "victory" ? "victory-stage" : "defeat-stage"}`}>
+              <div className="keeper-stance">
+                <KeeperCharacter phase={result === "victory" ? "phase-3" : "phase-2"} size="small" className="keeper-reaction" />
+                <p className="keeper-reaction-line">
+                  {result === "victory"
+                    ? "Well fought! The Keeper is proud of your steady kindness."
+                    : "The Keeper grows stronger... so do you!"}
+                </p>
+              </div>
+              <div className="player-stance">
+                <PlayerCharacter outfit={summaryOutfit} size="small" className={`player-reaction ${result === "victory" ? "hero-victory" : "player-defeat"}`} />
+                <p className="player-reaction-line">
+                  {result === "victory" ? "Gold shimmer surrounds your victory pose." : "A little shaken, yet still determined."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="summary-hero-stack">
+            <div className={`summary-hero-card ${result === "victory" ? "victory-hero" : "defeat-hero"}`}>
+              <div className="summary-hero-headline">
+                {result === "victory" ? (
+                  <>
+                    <div className="victory-banner">Victory!</div>
+                    <p className="hero-note">Keeper down. Your streak, focus, and kindness won the arena.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="defeat-banner">Try again!</div>
+                    <p className="hero-note">You battled bravely. Keep your streak in mind and come back stronger.</p>
+                  </>
+                )}
+              </div>
+              <div className="rank-badge summary-rank-badge">
+                <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
+                <div>
+                  <strong>{currentTier.name}</strong>
+                  <small>{currentTier.description}</small>
                 </div>
-                <div className="rank-badge victory-rank-badge">
-                  <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
-                  <div>
-                    <strong>{currentTier.name}</strong>
-                    <small>{currentTier.description}</small>
-                  </div>
-                </div>
-                <div className="victory-stats-grid">
-                  <div>
-                    <span>Score</span>
-                    <strong>{score} pts</strong>
-                  </div>
-                  <div>
-                    <span>Max combo</span>
-                    <strong>{battle.stats.maxStreak}x</strong>
-                  </div>
-                  <div>
-                    <span>Bosses cleared</span>
-                    <strong>{battle.stats.bossesDefeated}/{BOSSES.length}</strong>
-                  </div>
-                  <div>
-                    <span>Accuracy</span>
-                    <strong>{accuracy}%</strong>
-                  </div>
-                </div>
-                <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
+              </div>
+              {result === "victory" && (
                 <div className="confetti-shower" aria-hidden>
                   {confettiPieces.map((piece) => (
                     <span
@@ -2883,177 +2957,177 @@ export default function Page() {
                     />
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div className="summary-headline compact">
+              <h2>{result === "victory" ? "Learning Victory" : "Learning Summary"}</h2>
+              <p className="summary-headline-meta" title={scorecardHeadline}>{scorecardHeadline}</p>
+              <p className="summary-headline-meta">{config.label} · {config.ageBand} · {LEVEL_TUNING[level].label}</p>
+              <p className="summary-headline-meta">Mode high score: {highScores[mode] ?? 0}</p>
+            </div>
+
+            <div className="summary-key-stats">
+              {summaryKeyStats.map((stat) => (
+                <div key={stat.label}>
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                </div>
+              ))}
+            </div>
+
+            <div className="summary-detail-grid">
+              {summaryDetailStats.map((stat) => (
+                <div key={stat.label}>
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                </div>
+              ))}
+            </div>
+
+            <p className="level-badge summary-level-badge">{learningLevel}</p>
+
+            <div className="summary-hero-actions">
+              <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
+              {result === "game-over" && checkpoint && (
+                <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Keeper Challenge</button>
+              )}
+              <button className="ghost-btn" onClick={() => setScreen("title")}>Back to Title</button>
+            </div>
+          </div>
+
+          <div className="summary-details">
+            {growthSummary && (
+              <div className="scorecard-panel full-width pedagogy-growth compact-growth">
+                <strong>🌱 Growth Summary</strong>
+                <p className="growth-insight" title={growthSummary.actionableInsight}>{growthSummary.actionableInsight}</p>
+                <div className="growth-grid">
+                  {growthSummary.masteringFamilies.length > 0 && (
+                    <div>
+                      <strong className="growth-label">✨ Mastering</strong>
+                      <ul>
+                        {growthSummary.masteringFamilies.map((family) => {
+                          const stats = growthSummary.accuracyByFamily[family];
+                          return (
+                            <li key={family}>
+                              {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                  {growthSummary.strugglingFamilies.length > 0 && (
+                    <div>
+                      <strong className="growth-label">🎯 Focus areas</strong>
+                      <ul>
+                        {growthSummary.strugglingFamilies.map((family) => {
+                          const stats = growthSummary.accuracyByFamily[family];
+                          return (
+                            <li key={family}>
+                              {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                {growthSummary.hintsShown > 0 && (
+                  <p className="hint-note">
+                    💡 {growthSummary.hintsShown} hint{growthSummary.hintsShown === 1 ? "" : "s"} appeared to help you learn.
+                  </p>
+                )}
               </div>
-            ) : (
-              <div className="defeat-hero">
-                <div className="defeat-banner">Try again!</div>
-                <p className="defeat-message">You battled bravely. Keep your streak in mind and come back stronger.</p>
-                <div className="reaction-stage defeat-stage" aria-hidden="true">
-                  <div className="keeper-stance">
-                    <KeeperCharacter phase="phase-2" size="small" className="keeper-reaction keeper-triumph" />
-                    <p className="keeper-reaction-line">The Keeper grows stronger... so do you!</p>
-                  </div>
-                  <div className="player-stance">
-                    <PlayerCharacter outfit={summaryOutfit} size="small" className="player-reaction player-defeat" />
-                    <p className="player-reaction-line">A little shaken, yet still determined.</p>
-                  </div>
+            )}
+
+            <div className="scorecard-panel full-width compact-interpretation">
+              <strong>Parent / teacher interpretation</strong>
+              <ul>
+                <li title={stageInterpretation}>
+                  <strong>Stage lens:</strong> {selectedStage.label} · {LEVEL_TUNING[level].label} · {stageInterpretationShort}
+                </li>
+                <li title={timeoutSignal}>
+                  <strong>Why this matters:</strong> {timeoutSignalShort}
+                </li>
+                <li>
+                  <strong>What this stage usually targets:</strong> {selectedStage.questionBands.slice(0, 2).map((band) => band.label).join(" · ")}
+                </li>
+                <li>
+                  <strong>Quick note:</strong> {parentSummary}
+                </li>
+              </ul>
+            </div>
+
+            <div className="scorecard-layout">
+              <div className="scorecard-panel">
+                <strong>Strengths</strong>
+                <ul>
+                  {strengths.length > 0 ? strengths.map((item) => (
+                    <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
+                  )) : <li>Keep playing a few more rounds to identify clear strengths.</li>}
+                </ul>
+              </div>
+
+              <div className="scorecard-panel warn">
+                <strong>Needs more practice</strong>
+                <ul>
+                  {growthAreas.length > 0 ? growthAreas.map((item) => (
+                    <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
+                  )) : <li>No major weak spots this round. Keep stretching the challenge.</li>}
+                </ul>
+              </div>
+            </div>
+
+            <div className="scorecard-layout">
+              <div className="scorecard-panel full-width">
+                <strong>Recommended next focus for teacher/parent</strong>
+                <ul>
+                  {recommendedFocus.map((item) => (
+                    <li key={item.label}><strong>{item.label}:</strong> {item.note}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="scorecard-panel full-width">
+                <strong>What to practise next</strong>
+                <ul>
+                  {practiceNextSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {diagnosticRows.length > 0 && (
+              <div className="scorecard-panel full-width">
+                <strong>Skill breakdown</strong>
+                <div className="diagnostic-table">
+                  {diagnosticRows.map((row) => (
+                    <div key={row.key} className="diagnostic-row">
+                      <span>{row.label}</span>
+                      <span>{row.correct}/{row.attempts} correct</span>
+                      <span>{row.accuracy}%</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="defeat-tier">
-                  <span className="tier-icon" aria-hidden>{currentTier.icon}</span>
-                  <div>
-                    <strong>{currentTier.name}</strong>
-                    <small>Tier reached · {score} pts</small>
-                  </div>
-                </div>
-                <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
+              </div>
+            )}
+
+            {settings.persistSummaries && summaries.length > 0 && (
+              <div className="recent-runs">
+                <strong>Recent Runs</strong>
+                <ul>
+                  {summaries.slice(0, 3).map((item) => (
+                    <li key={item.id}>{MODE_CONFIGS[item.mode].label} · {item.result === "victory" ? "Win" : "Game Over"} · Score {item.score} · {item.accuracy}% accuracy</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
-          <div className="summary-headline">
-            <h2>{result === "victory" ? "Learning Victory" : "Learning Summary"}</h2>
-            <p>{scorecardHeadline} {config.label} mode · {config.ageBand} · {LEVEL_TUNING[level].label} track.</p>
-            <p>Mode high score: {highScores[mode] ?? 0}</p>
-          </div>
-          <div className="summary-grid">
-            <div><strong>Score</strong><span>{score}</span></div>
-            <div><strong>Accuracy</strong><span>{accuracy}%</span></div>
-            <div><strong>Correct</strong><span>{battle.stats.correctAnswers}</span></div>
-            <div><strong>Mistakes</strong><span>{battle.stats.wrongAnswers}</span></div>
-            <div><strong>Timeouts</strong><span>{timeoutAnswers}</span></div>
-            <div><strong>Spelling wins</strong><span>{battle.stats.spellingCorrect}</span></div>
-            <div><strong>Maths wins</strong><span>{battle.stats.mathsCorrect}</span></div>
-            <div><strong>Keeper challenge cleared</strong><span>{battle.stats.bossesDefeated}/{BOSSES.length}</span></div>
-            <div><strong>Best streak</strong><span>{battle.stats.maxStreak}</span></div>
-          </div>
-          <p className="level-badge">{learningLevel}</p>
-
-          {/* Growth Summary: Pedagogy Layer - Show accuracy by topic and actionable insights */}
-          {growthSummary && (
-            <div className="scorecard-panel full-width pedagogy-growth">
-              <strong>🌱 Growth Summary</strong>
-              <p style={{ fontSize: "1.1em", fontWeight: 500, marginTop: "0.5em" }}>{growthSummary.actionableInsight}</p>
-              
-              {growthSummary.masteringFamilies.length > 0 && (
-                <div style={{ marginTop: "1em" }}>
-                  <strong style={{ color: "#2ecc71" }}>✨ You&apos;re mastering:</strong>
-                  <ul style={{ marginLeft: "1em" }}>
-                    {growthSummary.masteringFamilies.map((family) => {
-                      const stats = growthSummary.accuracyByFamily[family];
-                      return (
-                        <li key={family}>
-                          {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-              
-              {growthSummary.strugglingFamilies.length > 0 && (
-                <div style={{ marginTop: "1em" }}>
-                  <strong style={{ color: "#e67e22" }}>🎯 Focus areas (let&apos;s improve these):</strong>
-                  <ul style={{ marginLeft: "1em" }}>
-                    {growthSummary.strugglingFamilies.map((family) => {
-                      const stats = growthSummary.accuracyByFamily[family];
-                      return (
-                        <li key={family} style={{ color: "#e67e22" }}>
-                          {family.replace(/-/g, " ")} — {stats.percentage}% ({stats.correct}/{stats.total} correct)
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-              
-              {growthSummary.hintsShown > 0 && (
-                <p style={{ marginTop: "1em", fontSize: "0.95em", color: "#7f8c8d" }}>
-                  💡 {growthSummary.hintsShown} hint{growthSummary.hintsShown === 1 ? "" : "s"} appeared to help you learn.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="scorecard-panel full-width">
-            <strong>Parent / teacher interpretation</strong>
-            <p><strong>Stage lens:</strong> {selectedStage.label} ({selectedStage.ageBand}) · {LEVEL_TUNING[level].label}</p>
-            <p>{stageInterpretation}</p>
-            <p><strong>Why this matters:</strong> {timeoutSignal}</p>
-            <p><strong>What this stage usually targets:</strong> {selectedStage.questionBands.slice(0, 2).map((band) => band.label).join(" · ")}</p>
-            <p><strong>Quick note:</strong> {parentSummary}</p>
-          </div>
-
-          <div className="scorecard-layout">
-            <div className="scorecard-panel">
-              <strong>Strengths</strong>
-              <ul>
-                {strengths.length > 0 ? strengths.map((item) => (
-                  <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
-                )) : <li>Keep playing a few more rounds to identify clear strengths.</li>}
-              </ul>
-            </div>
-
-            <div className="scorecard-panel warn">
-              <strong>Needs more practice</strong>
-              <ul>
-                {growthAreas.length > 0 ? growthAreas.map((item) => (
-                  <li key={item.key}>{item.label} — {item.correct}/{item.attempts} correct ({item.accuracy}%)</li>
-                )) : <li>No major weak spots this round. Keep stretching the challenge.</li>}
-              </ul>
-            </div>
-          </div>
-
-          <div className="scorecard-layout">
-            <div className="scorecard-panel full-width">
-              <strong>Recommended next focus for teacher/parent</strong>
-              <ul>
-                {recommendedFocus.map((item) => (
-                  <li key={item.label}><strong>{item.label}:</strong> {item.note}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="scorecard-panel full-width">
-              <strong>What to practise next</strong>
-              <ul>
-                {practiceNextSteps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {diagnosticRows.length > 0 && (
-            <div className="scorecard-panel full-width">
-              <strong>Skill breakdown</strong>
-              <div className="diagnostic-table">
-                {diagnosticRows.map((row) => (
-                  <div key={row.key} className="diagnostic-row">
-                    <span>{row.label}</span>
-                    <span>{row.correct}/{row.attempts} correct</span>
-                    <span>{row.accuracy}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="summary-actions">
-            {result === "game-over" && checkpoint && <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Keeper Challenge</button>}
-            <button className="ghost-btn" onClick={() => setScreen("title")}>Back to Title</button>
-          </div>
-
-          {settings.persistSummaries && summaries.length > 0 && (
-            <div className="recent-runs">
-              <strong>Recent Runs</strong>
-              <ul>
-                {summaries.slice(0, 3).map((item) => (
-                  <li key={item.id}>{MODE_CONFIGS[item.mode].label} · {item.result === "victory" ? "Win" : "Game Over"} · Score {item.score} · {item.accuracy}% accuracy</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </section>
       )}
     </main>
+    </>
   );
 }
