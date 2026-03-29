@@ -276,6 +276,9 @@ const MODE_DECOR: Record<DifficultyMode, { icon: string; badge: string }> = {
 };
 
 const QUESTION_TIME_LIMIT = 60;
+const PHASE_FLASH_DURATION = 220;
+const PHASE_DRAMA_DURATION = 950;
+const PHASE_BANNER_DURATION = 950;
 
 type AgeBand = "ages-4-6" | "ages-7-9" | "ages-10-plus";
 
@@ -924,6 +927,19 @@ const playComboSound = (threshold: number, offset = 0) => {
   playComboFiveSound(offset);
 };
 
+const playTierParticleTone = (delay = 0) => {
+  if (!audioUnlocked) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const masterVolume = getMasterVolumeMultiplier();
+  if (masterVolume <= 0) return;
+  const frequency = 250 + (Math.random() - 0.5) * 100;
+  const duration = 0.06 + Math.random() * 0.05;
+  const oscillatorType: OscillatorType = Math.random() < 0.5 ? "triangle" : "sine";
+  const volume = 0.05 + Math.random() * 0.02;
+  blip(frequency, duration, oscillatorType, volume, ctx.currentTime + delay);
+};
+
 function buildCorrectFeedback(boss: Boss, question: Question, hpAfterHit: number, config: ModeConfig) {
   const tip = question.typeLabel === "Spelling"
     ? "Spelling tip: say each sound slowly, then blend the word."
@@ -1149,6 +1165,21 @@ export default function Page() {
 
   const phaseDramaTimerRef = useRef<number | null>(null);
   const phaseFlashTimerRef = useRef<number | null>(null);
+  const phaseBannerTimerRef = useRef<number | null>(null);
+
+  const showPhaseBanner = (message: string, duration = 1400) => {
+    setPhaseBanner(message);
+    if (phaseBannerTimerRef.current && typeof window !== "undefined") {
+      window.clearTimeout(phaseBannerTimerRef.current);
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+    phaseBannerTimerRef.current = window.setTimeout(() => {
+      setPhaseBanner(null);
+      phaseBannerTimerRef.current = null;
+    }, duration);
+  };
 
   const spawnTierParticles = () => {
     if (tierBurstTimerRef.current) {
@@ -1183,6 +1214,7 @@ export default function Page() {
       };
     });
     setTierBurst({ id: stamp, particles: particlesPayload });
+    particlesPayload.forEach((particle) => playTierParticleTone(particle.delay));
     tierBurstTimerRef.current = window.setTimeout(() => {
       setTierBurst(null);
       tierBurstTimerRef.current = null;
@@ -1202,20 +1234,23 @@ export default function Page() {
   };
 
 
-  const triggerPhaseDrama = (phase: BossPhase) => {
+  const triggerPhaseDrama = (phase: BossPhase, bannerText?: string) => {
     const dramaId = Date.now();
     setPhaseDrama({ phase, id: dramaId });
     setPhaseFlash(true);
     if (phaseFlashTimerRef.current) {
       window.clearTimeout(phaseFlashTimerRef.current);
     }
-    phaseFlashTimerRef.current = window.setTimeout(() => setPhaseFlash(false), 170);
+    phaseFlashTimerRef.current = window.setTimeout(() => setPhaseFlash(false), PHASE_FLASH_DURATION);
     if (phaseDramaTimerRef.current) {
       window.clearTimeout(phaseDramaTimerRef.current);
     }
     phaseDramaTimerRef.current = window.setTimeout(() => {
       setPhaseDrama((current) => (current && current.id === dramaId ? null : current));
-    }, 950);
+    }, PHASE_DRAMA_DURATION);
+    if (bannerText) {
+      showPhaseBanner(bannerText, PHASE_BANNER_DURATION);
+    }
   };
 
   useEffect(() => {
@@ -1232,6 +1267,9 @@ export default function Page() {
       }
       if (phaseDramaTimerRef.current) {
         window.clearTimeout(phaseDramaTimerRef.current);
+      }
+      if (phaseBannerTimerRef.current) {
+        window.clearTimeout(phaseBannerTimerRef.current);
       }
       if (tierBurstTimerRef.current) {
         window.clearTimeout(tierBurstTimerRef.current);
@@ -1383,12 +1421,6 @@ export default function Page() {
     const t = setTimeout(() => setDamagePop(null), 900);
     return () => clearTimeout(t);
   }, [damagePop]);
-
-  useEffect(() => {
-    if (!phaseBanner) return;
-    const t = setTimeout(() => setPhaseBanner(null), 1400);
-    return () => clearTimeout(t);
-  }, [phaseBanner]);
 
   useEffect(() => {
     const previousTier = tierAnnouncedRef.current;
@@ -1619,7 +1651,7 @@ export default function Page() {
     setAttackMode("none");
     setDamagePop(null);
     setTypedAnswer("");
-    setPhaseBanner("Battle Start!");
+    showPhaseBanner("Battle Start!");
     resetQuestionTimer();
     setResult(null);
     
@@ -1655,7 +1687,7 @@ export default function Page() {
     setCheckpoint(resumeRun.checkpoint);
     setResult(null);
     setScreen("battle");
-    setPhaseBanner("Adventure Resumed");
+    showPhaseBanner("Adventure Resumed");
     setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
@@ -1668,7 +1700,7 @@ export default function Page() {
     setBattle(checkpoint);
     setResult(null);
     setScreen("battle");
-    setPhaseBanner("Retry Keeper");
+    showPhaseBanner("Retry Keeper");
     setTypedAnswer("");
     setAttackMode("none");
     setDamagePop(null);
@@ -1730,7 +1762,7 @@ export default function Page() {
     setAttackMode("none");
     setDamagePop(null);
     setTypedAnswer("");
-    setPhaseBanner(`${next.name} Enters!`);
+    showPhaseBanner(`${next.name} Enters!`);
     resetQuestionTimer();
     if (settings.persistProgress) {
       persistRunProgress(nextBattle, nextCheckpoint, mode, level);
@@ -1770,7 +1802,7 @@ export default function Page() {
     if (isTimeout) {
       setQuestionTimeLeft(-1);
       setTimeoutFlash(true);
-      setPhaseBanner("Time Up!");
+      showPhaseBanner("Time Up!");
     }
 
     // Lives system: when HP hits 0, lose a life
@@ -1817,7 +1849,7 @@ export default function Page() {
       };
       resetQuestionTimer();
       setBattle(restoredBattle);
-      setPhaseBanner(`❤️ ${newLives} Live${newLives === 1 ? "" : "s"} Left`);
+      showPhaseBanner(`❤️ ${newLives} Live${newLives === 1 ? "" : "s"} Left`);
       if (settings.persistProgress) {
         persistRunProgress(restoredBattle, checkpoint, mode, level);
       }
@@ -1924,10 +1956,9 @@ export default function Page() {
           "phase-3": "⚡ Incredible focus! Keeper enters Phase 3 - final stand!",
           "critical": "💥 One last push! The Keeper is nearly defeated!"
         };
-        triggerPhaseDrama(nextPhase);
-        setPhaseBanner(phaseMessages[nextPhase]);
+        triggerPhaseDrama(nextPhase, phaseMessages[nextPhase]);
       } else {
-        setPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
+        showPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
       }
 
       if (newBossHp <= 0) {
@@ -1952,7 +1983,7 @@ export default function Page() {
           }
         };
         setBattle(defeatedBattle);
-        setPhaseBanner("Keeper Defeated!");
+        showPhaseBanner("Keeper Defeated!");
         if (settings.persistProgress) {
           persistRunProgress(defeatedBattle, checkpoint, mode, level);
         }
@@ -2525,7 +2556,6 @@ export default function Page() {
             </div>
           )}
           {milestonePulse && <div className="milestone-glow-layer" aria-hidden />}
-          {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
           {(tierBanner || comboBanner) && (
             <div className="reward-banners" role="status" aria-live="assertive">
               {tierBanner && (
@@ -2629,6 +2659,7 @@ export default function Page() {
 
           <div className="battle-stage-shell">
             <div className={`boss-stage ${bossEntranceActive ? "boss-entrance" : ""} ${bossDefeatFlashing ? "boss-defeat" : ""} ${finalPhase ? "final-phase" : ""} ${phaseDrama ? "phase-drama" : ""}`} role="presentation">
+              {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
               <div className="boss-stage-header">
                 <div className="battle-boss-copy">
                   <span className="battle-scene-kicker">Keeper arena</span>
