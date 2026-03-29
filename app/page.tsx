@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { PlayerCharacter, KeeperCharacter, GoldBurstParticle, BluePuffParticle } from "@/components/CharacterVisuals";
 import {
   clearHighScores,
@@ -641,7 +642,23 @@ const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: Le
 
 type Screen = "onboarding" | "character-creation" | "title" | "battle" | "summary" | "settings" | "parental-controls";
 
+type ToneNote = {
+  freq: number;
+  duration: number;
+  type?: OscillatorType;
+  volume?: number;
+  delay?: number;
+};
+
+type CelebrationType = "tier" | "combo5" | "combo10";
+
+type TierBurst = {
+  id: number;
+  particles: Array<{ id: string; tx: number; ty: number }>;
+};
+
 let audioCtx: AudioContext | null = null;
+let soundAllowed = true;
 const getAudioContext = () => {
   if (typeof window === "undefined") return null;
   if (audioCtx) return audioCtx;
@@ -675,19 +692,20 @@ const WrongAnswerFeedback = ({ feedback }: { feedback: FeedbackType }) => {
   );
 };
 
-const blip = (freq: number, duration: number, type: OscillatorType, volume = 0.05) => {
+const blip = (freq: number, duration: number, type: OscillatorType, volume = 0.05, when?: number) => {
+  if (!soundAllowed) return;
   const ctx = getAudioContext();
   if (!ctx) return;
-  const now = ctx.currentTime;
+  const start = when ?? ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = type;
-  osc.frequency.setValueAtTime(freq, now);
-  gain.gain.setValueAtTime(volume, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  osc.frequency.setValueAtTime(freq, start);
+  gain.gain.setValueAtTime(volume, start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
   osc.connect(gain).connect(ctx.destination);
-  osc.start(now);
-  osc.stop(now + duration);
+  osc.start(start);
+  osc.stop(start + duration);
 };
 
 const speakCue = (tone: "start" | "correct" | "wrong" | "bossDown" | "victory") => {
@@ -699,6 +717,51 @@ const speakCue = (tone: "start" | "correct" | "wrong" | "bossDown" | "victory") 
     victory: [523, 659, 784, 988, 1318]
   };
   seq[tone].forEach((f, i) => window.setTimeout(() => blip(f, 0.13, tone === "wrong" ? "square" : "triangle", 0.06), i * 90));
+};
+
+const playToneSequence = (notes: ToneNote[], offset = 0) => {
+  if (!soundAllowed) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const startTime = ctx.currentTime + offset;
+  notes.forEach((note) => {
+    blip(note.freq, note.duration, note.type ?? "triangle", note.volume ?? 0.06, startTime + (note.delay ?? 0));
+  });
+};
+
+const playTierFanfare = () => {
+  const tierNotes: ToneNote[] = [
+    { freq: 392, duration: 0.18 },
+    { freq: 494, duration: 0.18, delay: 0.16 },
+    { freq: 587, duration: 0.2, delay: 0.34 },
+    { freq: 698, duration: 0.22, delay: 0.56, volume: 0.06 }
+  ];
+  playToneSequence(tierNotes);
+};
+
+const playComboFiveSound = () => {
+  playToneSequence([
+    { freq: 320, duration: 0.11, type: "sawtooth", volume: 0.04 },
+    { freq: 520, duration: 0.18, delay: 0.1 },
+    { freq: 660, duration: 0.18, delay: 0.32 }
+  ]);
+};
+
+const playComboTenSound = () => {
+  playToneSequence([
+    { freq: 280, duration: 0.12, type: "sawtooth", volume: 0.05 },
+    { freq: 520, duration: 0.2, delay: 0.14 },
+    { freq: 710, duration: 0.2, delay: 0.34 },
+    { freq: 880, duration: 0.24, delay: 0.56, volume: 0.07 }
+  ]);
+};
+
+const playComboSound = (threshold: number) => {
+  if (threshold >= 10) {
+    playComboTenSound();
+    return;
+  }
+  playComboFiveSound();
 };
 
 function buildCorrectFeedback(boss: Boss, question: Question, hpAfterHit: number, config: ModeConfig) {
@@ -863,6 +926,10 @@ export default function Page() {
   const handledTimeoutKeyRef = useRef<string | null>(null);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(QUESTION_TIME_LIMIT);
   const [timeoutFlash, setTimeoutFlash] = useState<boolean>(false);
+  const [comboBrokenFlash, setComboBrokenFlash] = useState<boolean>(false);
+  const comboBrokenTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const [milestonePulse, setMilestonePulse] = useState<boolean>(false);
+  const milestonePulseTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   
   /* Particle effects: Gold celebration (correct) or cool blue puff (wrong) */
   const [particles, setParticles] = useState<Array<{
@@ -871,6 +938,65 @@ export default function Page() {
     x: number;
     y: number;
   }>>([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [tierBurst, setTierBurst] = useState<TierBurst | null>(null);
+  const tierBurstTimerRef = useRef<number | null>(null);
+  const [celebrationShake, setCelebrationShake] = useState<{ id: number; type: CelebrationType } | null>(null);
+  const [bossEntranceActive, setBossEntranceActive] = useState(false);
+  const [bossDefeatFlashing, setBossDefeatFlashing] = useState(false);
+  const bossEntranceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const bossDefeatTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+
+  const queueCelebrationShake = (type: CelebrationType) => {
+    setCelebrationShake({ type, id: Date.now() });
+  };
+
+  const spawnTierParticles = () => {
+    if (tierBurstTimerRef.current) {
+      window.clearTimeout(tierBurstTimerRef.current);
+    }
+    const stamp = Date.now();
+    const particlesPayload = Array.from({ length: 8 }, (_, idx) => ({
+      id: `tier-particle-${stamp}-${idx}`,
+      tx: Math.random() * 140 - 70,
+      ty: -(Math.random() * 110 + 30)
+    }));
+    setTierBurst({ id: stamp, particles: particlesPayload });
+    tierBurstTimerRef.current = window.setTimeout(() => {
+      setTierBurst(null);
+      tierBurstTimerRef.current = null;
+    }, 900);
+  };
+
+  const celebrateTier = () => {
+    spawnTierParticles();
+    queueCelebrationShake("tier");
+    playTierFanfare();
+  };
+
+  const celebrateCombo = (threshold: number) => {
+    const type: CelebrationType = threshold >= 10 ? "combo10" : "combo5";
+    queueCelebrationShake(type);
+    playComboSound(threshold);
+  };
+
+  useEffect(() => {
+    soundAllowed = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    if (!celebrationShake) return;
+    const timer = window.setTimeout(() => setCelebrationShake(null), 220);
+    return () => window.clearTimeout(timer);
+  }, [celebrationShake]);
+
+  useEffect(() => {
+    return () => {
+      if (tierBurstTimerRef.current) {
+        window.clearTimeout(tierBurstTimerRef.current);
+      }
+    };
+  }, []);
 
   // Pedagogy layer: Spaced repetition, interleaving, hints, growth messaging
   const [autonomyMode, setAutonomyMode] = useState<"maths" | "words" | "mix">("mix");
@@ -945,6 +1071,12 @@ export default function Page() {
   const timerUrgency = getTimerUrgencyLevel(Math.max(0, questionTimeLeft), QUESTION_TIME_LIMIT);
   const timerUrgent = timerUrgency === "urgent" || timerUrgency === "critical";
   const timerCritical = timerUrgency === "critical";
+  const celebrationClass = celebrationShake ? `celebration-${celebrationShake.type}` : "";
+
+  const comboStreak = battle.stats.streak;
+  const comboDisplayValue = comboBrokenFlash ? 0 : comboStreak;
+  const comboVisible = comboStreak > 0 || comboBrokenFlash;
+  const comboLevel = comboStreak >= 10 ? 4 : comboStreak >= 7 ? 3 : comboStreak >= 4 ? 2 : comboStreak >= 2 ? 1 : 0;
 
   useEffect(() => {
     if (settings.persistDifficulty) {
@@ -987,6 +1119,7 @@ export default function Page() {
     if (currentTier.name !== previousTier) {
       tierAnnouncedRef.current = currentTier.name;
       setTierBanner(`${currentTier.name} unlocked! +${currentTier.bonus} bonus points!`);
+      celebrateTier();
     }
   }, [currentTier]);
 
@@ -1004,6 +1137,7 @@ export default function Page() {
       if (currentStreak >= milestone.threshold && previousStreak < milestone.threshold) {
         setComboBanner(`${milestone.label} x${milestone.threshold}!`);
         setComboBonus(milestone.bonus);
+        celebrateCombo(milestone.threshold);
         break;
       }
     }
@@ -1014,6 +1148,53 @@ export default function Page() {
     const t = setTimeout(() => setComboBanner(null), 1400);
     return () => clearTimeout(t);
   }, [comboBanner]);
+
+  useEffect(() => {
+    if (!comboBanner) return;
+    setMilestonePulse(true);
+    if (milestonePulseTimerRef.current) {
+      clearTimeout(milestonePulseTimerRef.current);
+    }
+    milestonePulseTimerRef.current = setTimeout(() => setMilestonePulse(false), 900);
+  }, [comboBanner]);
+
+  useEffect(() => {
+    if (screen !== "battle") {
+      setBossEntranceActive(false);
+      return;
+    }
+    setBossEntranceActive(true);
+    if (bossEntranceTimerRef.current) {
+      clearTimeout(bossEntranceTimerRef.current);
+    }
+    bossEntranceTimerRef.current = setTimeout(() => {
+      setBossEntranceActive(false);
+    }, 750);
+    return () => {
+      if (bossEntranceTimerRef.current) {
+        clearTimeout(bossEntranceTimerRef.current);
+      }
+    };
+  }, [battle.bossPhase, battle.bossIndex, screen]);
+
+  useEffect(() => {
+    if (battle.phase === "boss-defeated") {
+      setBossDefeatFlashing(true);
+      if (bossDefeatTimerRef.current) {
+        clearTimeout(bossDefeatTimerRef.current);
+      }
+      bossDefeatTimerRef.current = setTimeout(() => {
+        setBossDefeatFlashing(false);
+      }, 900);
+    } else if (bossDefeatFlashing) {
+      setBossDefeatFlashing(false);
+    }
+    return () => {
+      if (bossDefeatTimerRef.current) {
+        clearTimeout(bossDefeatTimerRef.current);
+      }
+    };
+  }, [battle.phase, bossDefeatFlashing]);
 
   useEffect(() => {
     if (screen !== "battle" || battle.phase !== "quiz") return;
@@ -1030,10 +1211,31 @@ export default function Page() {
     return () => clearTimeout(t);
   }, [timeoutFlash]);
 
+  useEffect(() => {
+    return () => {
+      if (comboBrokenTimerRef.current) {
+        clearTimeout(comboBrokenTimerRef.current);
+      }
+      if (milestonePulseTimerRef.current) {
+        clearTimeout(milestonePulseTimerRef.current);
+      }
+    };
+  }, []);
+
   const resetQuestionTimer = () => {
     handledTimeoutKeyRef.current = null;
     setQuestionTimeLeft(QUESTION_TIME_LIMIT);
     setTimeoutFlash(false);
+  };
+
+  const triggerComboBroken = () => {
+    setComboBrokenFlash(true);
+    if (comboBrokenTimerRef.current) {
+      clearTimeout(comboBrokenTimerRef.current);
+    }
+    comboBrokenTimerRef.current = setTimeout(() => {
+      setComboBrokenFlash(false);
+    }, 400);
   };
 
   const speak = (line: string, cue: "start" | "correct" | "wrong" | "bossDown" | "victory") => {
@@ -1261,6 +1463,7 @@ export default function Page() {
   };
 
   const resolveWrongAnswer = (isTimeout: boolean) => {
+    triggerComboBroken();
     const newPlayerHp = Math.max(0, battle.playerHp - config.wrongDamage);
     
     let feedbackData: FeedbackType;
@@ -1795,7 +1998,7 @@ export default function Page() {
             <div className="settings-section">
               <h3>🔊 Sound</h3>
               <label className="settings-toggle">
-                <input type="checkbox" checked={true} onChange={() => {}} />
+                <input type="checkbox" checked={soundEnabled} onChange={(e) => setSoundEnabled(e.target.checked)} />
                 Master Volume
               </label>
               <label className="settings-toggle">
@@ -2021,7 +2224,8 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")} mode-${mode}`}>
+        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")} mode-${mode} ${celebrationClass}`}>
+          {milestonePulse && <div className="milestone-glow-layer" aria-hidden />}
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
           {(tierBanner || comboBanner) && (
             <div className="reward-banners" role="status" aria-live="assertive">
@@ -2050,8 +2254,43 @@ export default function Page() {
                 <span className="hp-emoji" aria-hidden>👹</span>
               </div>
             </div>
+            <div className="combo-meter-zone" aria-live="polite">
+              {comboVisible && (
+                <div className="combo-meter-stack">
+                  <div
+                    className={`combo-meter combo-level-${comboLevel} ${comboBrokenFlash ? "combo-broken" : ""}`}
+                    role="status"
+                    aria-label={`Combo x${comboDisplayValue}`}
+                  >
+                    <span className="combo-label">combo</span>
+                    <strong className="combo-value">x{comboDisplayValue}</strong>
+                  </div>
+                  {comboBrokenFlash && (
+                    <span className="combo-broken-text" role="alert">
+                      COMBO BROKEN
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="rank-hud battle-rank-hud" aria-live="polite" aria-label={`Tier ${currentTier.name}`}>
-              <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
+              <div className="rank-icon-shell">
+                <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
+                {tierBurst && (
+                  <div className="tier-particle-field">
+                    {tierBurst.particles.map((particle) => (
+                      <span
+                        key={particle.id}
+                        className="tier-particle"
+                        style={{
+                          "--tx": `${particle.tx}px`,
+                          "--ty": `${particle.ty}px`
+                        } as CSSProperties}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="rank-body">
                 <div className="rank-top-row">
                   <strong className="rank-name">{currentTier.name}</strong>
@@ -2080,9 +2319,10 @@ export default function Page() {
             </button>
           </div>
           <div className={`impact-overlay ${attackMode === "hero" ? "hero" : attackMode === "boss" ? "boss" : ""}`} aria-hidden />
+          <div className={`battle-flash ${bossDefeatFlashing ? "boss-defeat-flash" : ""}`} aria-hidden />
 
           <div className="battle-stage-shell">
-            <div className="boss-stage" role="presentation">
+            <div className={`boss-stage ${bossEntranceActive ? "boss-entrance" : ""} ${bossDefeatFlashing ? "boss-defeat" : ""}`} role="presentation">
               <div className="boss-stage-header">
                 <div className="battle-boss-copy">
                   <span className="battle-scene-kicker">Keeper arena</span>
@@ -2245,10 +2485,60 @@ export default function Page() {
       )}
 
       {screen === "summary" && (
-        <section className="card center-stack end-card celebration summary-card">
-          <h2>{result === "victory" ? "Learning Victory" : "Learning Summary"}</h2>
-          <p>{scorecardHeadline} {config.label} mode · {config.ageBand} · {LEVEL_TUNING[level].label} track.</p>
-          <p>Mode high score: {highScores[mode] ?? 0}</p>
+        <section className={`card center-stack end-card celebration summary-card ${result === "victory" ? "victory-summary" : result === "game-over" ? "defeat-summary" : ""}`}>
+          <div className="summary-hero">
+            {result === "victory" ? (
+              <div className="victory-hero">
+                <div className="victory-banner">Victory!</div>
+                <p className="victory-subtitle">Keeper down. Your streak, focus, and kindness won the arena.</p>
+                <div className="rank-badge victory-rank-badge">
+                  <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
+                  <div>
+                    <strong>{currentTier.name}</strong>
+                    <small>{currentTier.description}</small>
+                  </div>
+                </div>
+                <div className="victory-stats-grid">
+                  <div>
+                    <span>Score</span>
+                    <strong>{score} pts</strong>
+                  </div>
+                  <div>
+                    <span>Max combo</span>
+                    <strong>{battle.stats.maxStreak}x</strong>
+                  </div>
+                  <div>
+                    <span>Bosses cleared</span>
+                    <strong>{battle.stats.bossesDefeated}/{BOSSES.length}</strong>
+                  </div>
+                  <div>
+                    <span>Accuracy</span>
+                    <strong>{accuracy}%</strong>
+                  </div>
+                </div>
+                <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
+                <div className="confetti-shower" aria-hidden />
+              </div>
+            ) : (
+              <div className="defeat-hero">
+                <div className="defeat-banner">Try again!</div>
+                <p className="defeat-message">You battled bravely. Keep your streak in mind and come back stronger.</p>
+                <div className="defeat-tier">
+                  <span className="tier-icon" aria-hidden>{currentTier.icon}</span>
+                  <div>
+                    <strong>{currentTier.name}</strong>
+                    <small>Tier reached · {score} pts</small>
+                  </div>
+                </div>
+                <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
+              </div>
+            )}
+          </div>
+          <div className="summary-headline">
+            <h2>{result === "victory" ? "Learning Victory" : "Learning Summary"}</h2>
+            <p>{scorecardHeadline} {config.label} mode · {config.ageBand} · {LEVEL_TUNING[level].label} track.</p>
+            <p>Mode high score: {highScores[mode] ?? 0}</p>
+          </div>
           <div className="summary-grid">
             <div><strong>Score</strong><span>{score}</span></div>
             <div><strong>Accuracy</strong><span>{accuracy}%</span></div>
@@ -2373,7 +2663,6 @@ export default function Page() {
           )}
 
           <div className="summary-actions">
-            <button className="big-btn" onClick={startGame}>Replay Same Mode</button>
             {result === "game-over" && checkpoint && <button className="ghost-btn" onClick={replayFromCheckpoint}>Retry Keeper Challenge</button>}
             <button className="ghost-btn" onClick={() => setScreen("title")}>Back to Title</button>
           </div>

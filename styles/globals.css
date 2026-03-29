@@ -432,6 +432,21 @@ body {
 
 .screen-shake { animation: screenShake 0.45s linear; }
 
+.battle-card.celebration-tier,
+.battle-card.celebration-combo5 {
+  animation: screenShake 0.18s ease;
+}
+
+.battle-card.celebration-combo10 {
+  animation: screenShake 0.2s ease, celebrationPulse 0.18s ease;
+}
+
+@keyframes celebrationPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
 @keyframes screenShake {
   0%, 100% { transform: translate(0, 0); }
   20% { transform: translate(-4px, 1px); }
@@ -1465,6 +1480,251 @@ body {
 
 /* Defeat mode: Red alert */
 .battle-card.defeat-mode { animation: defeatFlash 0.9s ease-in-out infinite; }
+
+/* Boss entrance & defeat choreography */
+.boss-stage.boss-entrance .boss-sprite {
+  animation: bossEntrance 0.75s ease-out forwards;
+  transform-origin: center bottom;
+}
+.boss-stage.boss-entrance .boss-stage-glow {
+  animation: bossGlowBuild 0.75s ease-out forwards;
+}
+.boss-stage.boss-defeat .boss-sprite {
+  animation: bossDefeatSequence 0.85s ease forwards;
+}
+.boss-stage.boss-defeat .boss-stage-glow {
+  animation: bossDefeatGlow 0.85s ease forwards;
+}
+.battle-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+}
+.battle-flash.boss-defeat-flash {
+  animation: bossDefeatScreenFlash 0.85s ease-out forwards;
+}
+@keyframes bossEntrance {
+  0% {
+    opacity: 0;
+    transform: translateX(100px) scale(0.82);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(0) scale(1.04);
+    filter: blur(0);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes bossGlowBuild {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  80% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes bossDefeatSequence {
+  0% {
+    transform: translateX(0) scale(1);
+    filter: saturate(1);
+  }
+  18% {
+    transform: translateX(-6px) rotate(-4deg) scale(1.05);
+    filter: saturate(1.2);
+  }
+  40% {
+    transform: translateX(5px) rotate(3deg) scale(1.04);
+  }
+  60% {
+    transform: translateX(-3px) rotate(-2deg) scale(1.08) brightness(1.3);
+  }
+  80% {
+    transform: translateY(-12px) scale(0.9);
+    opacity: 0.9;
+    filter: brightness(1.6);
+  }
+  100% {
+    transform: scale(0.22) translateY(-32px);
+    opacity: 0;
+    filter: brightness(2);
+  }
+}
+@keyframes bossDefeatScreenFlash {
+  0% {
+    background: rgba(255, 255, 255, 0);
+    opacity: 0;
+  }
+  30% {
+    background: rgba(255, 255, 255, 0.9);
+    opacity: 1;
+  }
+  100% {
+    background: rgba(255, 255, 255, 0);
+    opacity: 0;
+  }
+}
+@keyframes bossDefeatGlow {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+/* Victory & Defeat summary hero */
+.summary-card {
+  position: relative;
+  overflow: hidden;
+}
+.summary-hero {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.6rem;
+}
+.summary-headline {
+  text-align: center;
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+.summary-hero > div {
+  width: min(640px, 100%);
+}
+.victory-hero,
+.defeat-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.4rem 1.6rem;
+  border-radius: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: grid;
+  gap: 0.7rem;
+  box-shadow: 0 22px 50px rgba(255, 215, 0, 0.12), 0 12px 30px rgba(7, 5, 25, 0.45);
+}
+.victory-hero {
+  background: linear-gradient(145deg, rgba(255, 242, 198, 0.85), rgba(255, 205, 110, 0.4));
+}
+.defeat-hero {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(203, 85, 143, 0.16));
+}
+.victory-banner,
+.defeat-banner {
+  align-self: flex-start;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+.victory-banner {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 215, 153, 0.4));
+  color: #4a2d00;
+}
+.defeat-banner {
+  background: linear-gradient(135deg, rgba(255, 108, 108, 0.9), rgba(255, 189, 189, 0.6));
+  color: #420f0f;
+}
+.rank-badge {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+.rank-badge strong {
+  display: block;
+  font-size: 1.2rem;
+}
+.rank-badge small {
+  display: block;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+.victory-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.victory-stats-grid div {
+  padding: 0.65rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  text-align: center;
+}
+.victory-stats-grid span {
+  display: block;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: rgba(20, 20, 20, 0.6);
+}
+.victory-stats-grid strong {
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+.hero-btn {
+  justify-self: center;
+  min-width: 200px;
+  width: min(280px, 100%);
+}
+.defeat-tier {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.defeat-tier strong {
+  display: block;
+  font-size: 1rem;
+}
+.defeat-tier small {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.defeat-message {
+  margin: 0;
+  font-weight: 600;
+}
+.confetti-shower {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 40%),
+    radial-gradient(circle, rgba(255, 215, 0, 0.6) 10%, transparent 45%);
+  opacity: 0.7;
+  animation: confettiDrift 2.6s linear infinite;
+}
+@keyframes confettiDrift {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(20px);
+  }
+}
 
 /* Character Creation & Display */
 
@@ -2542,6 +2802,45 @@ body.high-contrast-mode .bar {
   backdrop-filter: blur(6px);
   color: #ffffff;
 }
+.rank-icon-shell {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: inline-grid;
+  place-items: center;
+}
+.rank-icon-shell .rank-icon {
+  position: relative;
+  z-index: 2;
+  font-size: 1.6rem;
+}
+.tier-particle-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tier-particle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff4c3, #f5ba37);
+  box-shadow: 0 0 8px rgba(255, 223, 145, 0.9);
+  animation: tierParticleBurst 0.9s ease-out forwards;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+@keyframes tierParticleBurst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--tx, 0), var(--ty, 0)) scale(0.4);
+  }
+}
 .battle-rank-hud .rank-icon {
   font-size: 1.6rem;
   line-height: 1;
@@ -2645,6 +2944,120 @@ body.high-contrast-mode .bar {
   80% { opacity: 1; }
   100% { opacity: 0; transform: translateY(-8px) scale(0.95); }
 }
+
+.combo-meter-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+}
+
+.combo-meter-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.combo-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.95rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(5, 8, 24, 0.74);
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 900;
+  transition: transform 0.3s ease, box-shadow 0.35s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.combo-meter .combo-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  opacity: 0.8;
+}
+
+.combo-meter .combo-value {
+  font-size: 1.2rem;
+  font-family: "Quicksand", "Open Sans", system-ui, sans-serif;
+}
+
+.combo-level-0 {
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+  transform: scale(1);
+}
+
+.combo-level-1 {
+  color: #fff7c6;
+  box-shadow: 0 0 16px rgba(255, 247, 198, 0.6);
+  transform: scale(1.02);
+}
+
+.combo-level-2 {
+  color: #ffd266;
+  box-shadow: 0 0 20px rgba(255, 210, 102, 0.65);
+  transform: scale(1.04);
+}
+
+.combo-level-3 {
+  color: #ff9f1c;
+  box-shadow: 0 0 24px rgba(255, 159, 28, 0.75);
+  transform: scale(1.06);
+}
+
+.combo-level-4 {
+  color: #ff6b6b;
+  box-shadow: 0 0 28px rgba(255, 107, 107, 0.85);
+  transform: scale(1.08);
+}
+
+.combo-meter.combo-broken {
+  border-color: rgba(255, 107, 107, 0.6);
+  color: #ff6b6b;
+  box-shadow: 0 0 30px rgba(255, 107, 107, 0.6), 0 0 12px rgba(255, 255, 255, 0.35);
+  animation: comboBrokenPulse 0.35s ease-out;
+}
+
+.combo-broken-text {
+  font-size: 0.72rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #ffd8d4;
+  animation: comboBrokenFade 0.35s ease-out forwards;
+}
+
+@keyframes comboBrokenPulse {
+  0% { transform: scale(1.08); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+@keyframes comboBrokenFade {
+  0% { opacity: 0; transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.milestone-glow-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.55), transparent 55%);
+  mix-blend-mode: screen;
+  animation: milestoneGlowPulse 0.9s ease-out;
+  z-index: 1;
+}
+
+@keyframes milestoneGlowPulse {
+  0% { opacity: 0; transform: scale(0.92); }
+  40% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+
 
 /* Power Level HUD Enhancement */
 .power-level-hud {
