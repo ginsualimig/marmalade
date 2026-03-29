@@ -652,13 +652,90 @@ type ToneNote = {
 
 type CelebrationType = "tier" | "combo5" | "combo10";
 
+type TierParticle = {
+  id: string;
+  tx: number;
+  ty: number;
+  gravity: number;
+  drift: number;
+  size: number;
+  duration: number;
+  delay: number;
+  spinStart: number;
+  spinSpeed: number;
+};
+
 type TierBurst = {
   id: number;
-  particles: Array<{ id: string; tx: number; ty: number }>;
+  particles: TierParticle[];
+};
+
+const TIER_PARTICLE_COUNT = 22;
+const TIER_BURST_DURATION = 1500;
+const CONFETTI_COLORS = ["#f9d466", "#ff9ec4", "#64d2ff", "#5ffc82", "#ffb34d"];
+const CONFETTI_PIECE_COUNT = 45;
+
+type ConfettiPiece = {
+  id: string;
+  drift: number;
+  duration: number;
+  delay: number;
+  spinSpeed: number;
+  size: number;
+  color: string;
+  startLeft: number;
+  tilt: number;
+  wave: number;
+};
+
+type SoundPreferences = {
+  enabled: boolean;
+  volume: number;
+};
+
+const SOUND_PREFS_KEY = "marmalade-sound-prefs-v1";
+const DEFAULT_SOUND_PREFS: SoundPreferences = {
+  enabled: true,
+  volume: 0.8
+};
+const CELEBRATION_SOUND_DELAY = 0.08;
+
+const clampVolume = (value: number) => Math.min(1, Math.max(0, value));
+
+const loadSoundPreferences = (): SoundPreferences => {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return DEFAULT_SOUND_PREFS;
+  }
+  try {
+    const raw = window.localStorage.getItem(SOUND_PREFS_KEY);
+    if (!raw) return DEFAULT_SOUND_PREFS;
+    const parsed = JSON.parse(raw);
+    const enabled = typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULT_SOUND_PREFS.enabled;
+    const volume = typeof parsed.volume === "number" ? clampVolume(parsed.volume) : DEFAULT_SOUND_PREFS.volume;
+    return { enabled, volume };
+  } catch {
+    return DEFAULT_SOUND_PREFS;
+  }
+};
+
+const saveSoundPreferences = (prefs: SoundPreferences) => {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(SOUND_PREFS_KEY, JSON.stringify({
+      enabled: prefs.enabled,
+      volume: clampVolume(prefs.volume)
+    }));
+  } catch {
+    // ignore storage errors
+  }
 };
 
 let audioCtx: AudioContext | null = null;
-let soundAllowed = true;
+let masterVolumeActual = 0;
+let masterVolumeTarget = DEFAULT_SOUND_PREFS.volume;
+let audioMuted = false;
+let audioUnlocked = false;
+let volumeFadeFrame: number | null = null;
 const getAudioContext = () => {
   if (typeof window === "undefined") return null;
   if (audioCtx) return audioCtx;
@@ -666,6 +743,88 @@ const getAudioContext = () => {
   if (!Ctor) return null;
   audioCtx = new Ctor();
   return audioCtx;
+};
+
+const animateVolumeTo = (target: number, duration = 260) => {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    masterVolumeActual = clampVolume(target);
+    return;
+  }
+  if (volumeFadeFrame) {
+    cancelAnimationFrame(volumeFadeFrame);
+    volumeFadeFrame = null;
+  }
+  const startValue = masterVolumeActual;
+  const clampedTarget = clampVolume(target);
+  const delta = clampedTarget - startValue;
+  const startTime = performance.now();
+  const step = (currentTime: number) => {
+    const progress = Math.min(1, (currentTime - startTime) / duration);
+    masterVolumeActual = clampVolume(startValue + delta * progress);
+    if (progress < 1) {
+      volumeFadeFrame = requestAnimationFrame(step);
+    } else {
+      volumeFadeFrame = null;
+    }
+  };
+  volumeFadeFrame = requestAnimationFrame(step);
+};
+
+const updatePlaybackVolume = (fade = false, overrideTarget?: number) => {
+  const target = overrideTarget !== undefined
+    ? clampVolume(overrideTarget)
+    : audioMuted
+      ? 0
+      : clampVolume(masterVolumeTarget);
+
+  if (!audioUnlocked) {
+    masterVolumeActual = 0;
+    if (volumeFadeFrame) {
+      cancelAnimationFrame(volumeFadeFrame);
+      volumeFadeFrame = null;
+    }
+    return;
+  }
+
+  if (target <= 0) {
+    masterVolumeActual = 0;
+    if (volumeFadeFrame) {
+      cancelAnimationFrame(volumeFadeFrame);
+      volumeFadeFrame = null;
+    }
+    return;
+  }
+
+  if (fade) {
+    animateVolumeTo(target);
+  } else {
+    if (volumeFadeFrame) {
+      cancelAnimationFrame(volumeFadeFrame);
+      volumeFadeFrame = null;
+    }
+    masterVolumeActual = target;
+  }
+};
+
+const setVolumeTarget = (value: number, fade = false) => {
+  masterVolumeTarget = clampVolume(value);
+  updatePlaybackVolume(fade);
+};
+
+const setMutedState = (muted: boolean, fade = true) => {
+  audioMuted = muted;
+  updatePlaybackVolume(fade);
+};
+
+const primeAudioPlayback = () => {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  updatePlaybackVolume(true);
+};
+
+const getMasterVolumeMultiplier = () => {
+  if (!audioUnlocked || audioMuted) return 0;
+  return masterVolumeActual;
 };
 
 const WrongAnswerFeedback = ({ feedback }: { feedback: FeedbackType }) => {
@@ -692,16 +851,17 @@ const WrongAnswerFeedback = ({ feedback }: { feedback: FeedbackType }) => {
   );
 };
 
-const blip = (freq: number, duration: number, type: OscillatorType, volume = 0.05, when?: number) => {
-  if (!soundAllowed) return;
+const blip = (freq: number, duration: number, type: OscillatorType, volume = 0.15, when?: number) => {
   const ctx = getAudioContext();
-  if (!ctx) return;
+  if (!ctx || !audioUnlocked) return;
   const start = when ?? ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, start);
-  gain.gain.setValueAtTime(volume, start);
+  const masterVolume = getMasterVolumeMultiplier();
+  const finalGain = volume * masterVolume;
+  gain.gain.setValueAtTime(finalGain, start);
   gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
   osc.connect(gain).connect(ctx.destination);
   osc.start(start);
@@ -716,52 +876,52 @@ const speakCue = (tone: "start" | "correct" | "wrong" | "bossDown" | "victory") 
     bossDown: [523, 659, 784, 988],
     victory: [523, 659, 784, 988, 1318]
   };
-  seq[tone].forEach((f, i) => window.setTimeout(() => blip(f, 0.13, tone === "wrong" ? "square" : "triangle", 0.06), i * 90));
+  seq[tone].forEach((f, i) => window.setTimeout(() => blip(f, 0.13, tone === "wrong" ? "square" : "triangle", 0.18), i * 90));
 };
 
 const playToneSequence = (notes: ToneNote[], offset = 0) => {
-  if (!soundAllowed) return;
+  if (!audioUnlocked) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   const startTime = ctx.currentTime + offset;
   notes.forEach((note) => {
-    blip(note.freq, note.duration, note.type ?? "triangle", note.volume ?? 0.06, startTime + (note.delay ?? 0));
+    blip(note.freq, note.duration, note.type ?? "triangle", note.volume ?? 0.18, startTime + (note.delay ?? 0));
   });
 };
 
-const playTierFanfare = () => {
+const playTierFanfare = (offset = 0) => {
   const tierNotes: ToneNote[] = [
     { freq: 392, duration: 0.18 },
     { freq: 494, duration: 0.18, delay: 0.16 },
     { freq: 587, duration: 0.2, delay: 0.34 },
-    { freq: 698, duration: 0.22, delay: 0.56, volume: 0.06 }
+    { freq: 698, duration: 0.22, delay: 0.56, volume: 0.18 }
   ];
-  playToneSequence(tierNotes);
+  playToneSequence(tierNotes, offset);
 };
 
-const playComboFiveSound = () => {
+const playComboFiveSound = (offset = 0) => {
   playToneSequence([
-    { freq: 320, duration: 0.11, type: "sawtooth", volume: 0.04 },
+    { freq: 320, duration: 0.11, type: "sawtooth", volume: 0.12 },
     { freq: 520, duration: 0.18, delay: 0.1 },
     { freq: 660, duration: 0.18, delay: 0.32 }
-  ]);
+  ], offset);
 };
 
-const playComboTenSound = () => {
+const playComboTenSound = (offset = 0) => {
   playToneSequence([
-    { freq: 280, duration: 0.12, type: "sawtooth", volume: 0.05 },
+    { freq: 280, duration: 0.12, type: "sawtooth", volume: 0.15 },
     { freq: 520, duration: 0.2, delay: 0.14 },
     { freq: 710, duration: 0.2, delay: 0.34 },
-    { freq: 880, duration: 0.24, delay: 0.56, volume: 0.07 }
-  ]);
+    { freq: 880, duration: 0.24, delay: 0.56, volume: 0.21 }
+  ], offset);
 };
 
-const playComboSound = (threshold: number) => {
+const playComboSound = (threshold: number, offset = 0) => {
   if (threshold >= 10) {
-    playComboTenSound();
+    playComboTenSound(offset);
     return;
   }
-  playComboFiveSound();
+  playComboFiveSound(offset);
 };
 
 function buildCorrectFeedback(boss: Boss, question: Question, hpAfterHit: number, config: ModeConfig) {
@@ -918,6 +1078,8 @@ export default function Page() {
   const [tierBanner, setTierBanner] = useState<string | null>(null);
   const [comboBanner, setComboBanner] = useState<string | null>(null);
   const [comboBonus, setComboBonus] = useState<number>(0);
+  const [phaseDrama, setPhaseDrama] = useState<{ phase: BossPhase; id: number } | null>(null);
+  const [phaseFlash, setPhaseFlash] = useState<boolean>(false);
   const tierAnnouncedRef = useRef<string>(TIER_CONFIGS[0].name);
   const previousStreakRef = useRef<number>(0);
   const [typedAnswer, setTypedAnswer] = useState<string>("");
@@ -938,7 +1100,12 @@ export default function Page() {
     x: number;
     y: number;
   }>>([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const initialSoundPrefs = useMemo(() => loadSoundPreferences(), []);
+  const [soundEnabled, setSoundEnabled] = useState(initialSoundPrefs.enabled);
+  const [volumeSetting, setVolumeSetting] = useState(initialSoundPrefs.volume);
+  const [audioPrimed, setAudioPrimed] = useState(false);
+  const muteInitialRef = useRef(true);
+  const volumeInitialRef = useRef(true);
   const [tierBurst, setTierBurst] = useState<TierBurst | null>(null);
   const tierBurstTimerRef = useRef<number | null>(null);
   const [celebrationShake, setCelebrationShake] = useState<{ id: number; type: CelebrationType } | null>(null);
@@ -947,42 +1114,109 @@ export default function Page() {
   const bossEntranceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const bossDefeatTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
+  useEffect(() => {
+    saveSoundPreferences({ enabled: soundEnabled, volume: volumeSetting });
+  }, [soundEnabled, volumeSetting]);
+
+  useEffect(() => {
+    setMutedState(!soundEnabled, !muteInitialRef.current);
+    muteInitialRef.current = false;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    setVolumeTarget(volumeSetting, !volumeInitialRef.current);
+    volumeInitialRef.current = false;
+  }, [volumeSetting]);
+
+  useEffect(() => {
+    if (audioPrimed) return;
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      setAudioPrimed(true);
+      primeAudioPlayback();
+    };
+    window.addEventListener("pointerdown", handler, { once: true, capture: true });
+    window.addEventListener("keydown", handler, { once: true, capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", handler, { capture: true });
+      window.removeEventListener("keydown", handler, { capture: true });
+    };
+  }, [audioPrimed]);
+
   const queueCelebrationShake = (type: CelebrationType) => {
     setCelebrationShake({ type, id: Date.now() });
   };
+
+  const phaseDramaTimerRef = useRef<number | null>(null);
+  const phaseFlashTimerRef = useRef<number | null>(null);
 
   const spawnTierParticles = () => {
     if (tierBurstTimerRef.current) {
       window.clearTimeout(tierBurstTimerRef.current);
     }
     const stamp = Date.now();
-    const particlesPayload = Array.from({ length: 8 }, (_, idx) => ({
-      id: `tier-particle-${stamp}-${idx}`,
-      tx: Math.random() * 140 - 70,
-      ty: -(Math.random() * 110 + 30)
-    }));
+    const sizeOptions = [10, 12, 14, 18];
+    const particlesPayload: TierParticle[] = Array.from({ length: TIER_PARTICLE_COUNT }, (_, idx) => {
+      const angleDeg = Math.random() * 120 - 60;
+      const angleRad = (angleDeg * Math.PI) / 180;
+      const distance = Math.random() * 80 + 80;
+      const tx = Math.sin(angleRad) * distance;
+      const ty = -Math.cos(angleRad) * distance - Math.random() * 25;
+      const gravity = Math.random() * 50 + 100;
+      const drift = (Math.random() - 0.5) * 60;
+      const size = sizeOptions[Math.floor(Math.random() * sizeOptions.length)];
+      const duration = 0.95 + Math.random() * 0.5;
+      const delay = Math.random() * 0.12;
+      const spinStart = Math.random() * 360;
+      const spinSpeed = (Math.random() * 860 + 260) * (Math.random() < 0.5 ? -1 : 1);
+      return {
+        id: `tier-particle-${stamp}-${idx}`,
+        tx,
+        ty,
+        gravity,
+        drift,
+        size,
+        duration,
+        delay,
+        spinStart,
+        spinSpeed
+      };
+    });
     setTierBurst({ id: stamp, particles: particlesPayload });
     tierBurstTimerRef.current = window.setTimeout(() => {
       setTierBurst(null);
       tierBurstTimerRef.current = null;
-    }, 900);
+    }, TIER_BURST_DURATION);
   };
 
   const celebrateTier = () => {
     spawnTierParticles();
     queueCelebrationShake("tier");
-    playTierFanfare();
+    playTierFanfare(CELEBRATION_SOUND_DELAY);
   };
 
   const celebrateCombo = (threshold: number) => {
     const type: CelebrationType = threshold >= 10 ? "combo10" : "combo5";
     queueCelebrationShake(type);
-    playComboSound(threshold);
+    playComboSound(threshold, CELEBRATION_SOUND_DELAY);
   };
 
-  useEffect(() => {
-    soundAllowed = soundEnabled;
-  }, [soundEnabled]);
+
+  const triggerPhaseDrama = (phase: BossPhase) => {
+    const dramaId = Date.now();
+    setPhaseDrama({ phase, id: dramaId });
+    setPhaseFlash(true);
+    if (phaseFlashTimerRef.current) {
+      window.clearTimeout(phaseFlashTimerRef.current);
+    }
+    phaseFlashTimerRef.current = window.setTimeout(() => setPhaseFlash(false), 170);
+    if (phaseDramaTimerRef.current) {
+      window.clearTimeout(phaseDramaTimerRef.current);
+    }
+    phaseDramaTimerRef.current = window.setTimeout(() => {
+      setPhaseDrama((current) => (current && current.id === dramaId ? null : current));
+    }, 950);
+  };
 
   useEffect(() => {
     if (!celebrationShake) return;
@@ -990,8 +1224,15 @@ export default function Page() {
     return () => window.clearTimeout(timer);
   }, [celebrationShake]);
 
+
   useEffect(() => {
     return () => {
+      if (phaseFlashTimerRef.current) {
+        window.clearTimeout(phaseFlashTimerRef.current);
+      }
+      if (phaseDramaTimerRef.current) {
+        window.clearTimeout(phaseDramaTimerRef.current);
+      }
       if (tierBurstTimerRef.current) {
         window.clearTimeout(tierBurstTimerRef.current);
       }
@@ -1066,12 +1307,47 @@ export default function Page() {
       : "Once accuracy stays strong, slightly speed up recall with short daily drills.",
     `If the learner is frustrated, temporarily step down from ${selectedStage.label} expectations and rebuild with ${selectedStage.questionBands[0]?.label.toLowerCase() ?? "foundational items"}.`
   ];
+  const summaryFallbackAppearance = {
+    hat: APPEARANCE_OPTIONS.hat[0].id,
+    shirt: APPEARANCE_OPTIONS.shirt[0].id,
+    pants: APPEARANCE_OPTIONS.pants[0].id,
+    shoes: APPEARANCE_OPTIONS.shoes[0].id
+  };
+  const summaryOutfit = character?.appearance ?? summaryFallbackAppearance;
   const questionTimerKey = `${screen}-${battle.phase}-${battle.bossIndex}-${battle.round}-${battle.question.prompt}`;
   const timerPercent = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_TIME_LIMIT) * 100));
   const timerUrgency = getTimerUrgencyLevel(Math.max(0, questionTimeLeft), QUESTION_TIME_LIMIT);
   const timerUrgent = timerUrgency === "urgent" || timerUrgency === "critical";
   const timerCritical = timerUrgency === "critical";
   const celebrationClass = celebrationShake ? `celebration-${celebrationShake.type}` : "";
+  const confettiPieces = useMemo<ConfettiPiece[]>(() => {
+    if (result !== "victory") return [];
+    const stamp = Date.now();
+    const sizeOptions = [10, 12, 16, 20];
+    return Array.from({ length: CONFETTI_PIECE_COUNT }, (_, idx) => ({
+      id: `${stamp}-${idx}`,
+      drift: Math.random() * 60 - 30,
+      duration: 4 + Math.random() * 2,
+      delay: Math.random() * 1.2,
+      spinSpeed: (Math.random() * 420 + 200) * (Math.random() < 0.5 ? -1 : 1),
+      size: sizeOptions[Math.floor(Math.random() * sizeOptions.length)],
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      startLeft: 5 + Math.random() * 90,
+      tilt: Math.random() * 60 - 30,
+      wave: Math.random() * 22 - 11
+    }));
+  }, [result]);
+  const finalPhase = battle.bossPhase === "critical";
+  const dramaActive = Boolean(phaseDrama);
+  const dramaClass = dramaActive ? "phase-drama-active" : "";
+  const finalPhaseClass = finalPhase ? "final-phase-vibe" : "";
+  const phaseDramaLabel = phaseDrama
+    ? phaseDrama.phase === "critical"
+      ? "FINAL PHASE"
+      : phaseDrama.phase === "phase-3"
+        ? "PHASE 3"
+        : "PHASE 2"
+    : "";
 
   const comboStreak = battle.stats.streak;
   const comboDisplayValue = comboBrokenFlash ? 0 : comboStreak;
@@ -1648,6 +1924,7 @@ export default function Page() {
           "phase-3": "⚡ Incredible focus! Keeper enters Phase 3 - final stand!",
           "critical": "💥 One last push! The Keeper is nearly defeated!"
         };
+        triggerPhaseDrama(nextPhase);
         setPhaseBanner(phaseMessages[nextPhase]);
       } else {
         setPhaseBanner(battle.stats.streak + 1 >= 3 ? `Combo x${battle.stats.streak + 1}!` : "Direct Hit!");
@@ -2001,6 +2278,21 @@ export default function Page() {
                 <input type="checkbox" checked={soundEnabled} onChange={(e) => setSoundEnabled(e.target.checked)} />
                 Master Volume
               </label>
+              <div className="volume-control">
+                <label htmlFor="sound-volume-slider">
+                  <span>Sound FX</span>
+                  <span>{Math.round(volumeSetting * 100)}%</span>
+                </label>
+                <input
+                  id="sound-volume-slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(volumeSetting * 100)}
+                  onChange={(e) => setVolumeSetting(Number(e.target.value) / 100)}
+                  aria-label="Sound FX volume"
+                />
+              </div>
               <label className="settings-toggle">
                 <input type="checkbox" checked={true} onChange={() => {}} />
                 Keeper Dialogue
@@ -2224,7 +2516,14 @@ export default function Page() {
       )}
 
       {screen === "battle" && (
-        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")} mode-${mode} ${celebrationClass}`}>
+        <section className={`card battle-card immersive-battle keeper-encounter battle-viewport ${getAttackClasses(battle.lastHit, attackMode, timeoutFlash).join(" ")} mode-${mode} ${celebrationClass} ${dramaClass} ${finalPhaseClass}`}>
+          <div className={`phase-transition-flash ${phaseFlash ? "active" : ""}`} aria-hidden />
+          <div className={`final-phase-vignette ${finalPhase ? "active" : ""}`} aria-hidden />
+          {phaseDrama && (
+            <div className={`phase-drama-banner phase-drama-${phaseDrama.phase}`} role="status" aria-live="assertive">
+              <span>{phaseDramaLabel}</span>
+            </div>
+          )}
           {milestonePulse && <div className="milestone-glow-layer" aria-hidden />}
           {phaseBanner && <div className="phase-banner">{phaseBanner}</div>}
           {(tierBanner || comboBanner) && (
@@ -2284,7 +2583,14 @@ export default function Page() {
                         className="tier-particle"
                         style={{
                           "--tx": `${particle.tx}px`,
-                          "--ty": `${particle.ty}px`
+                          "--ty": `${particle.ty}px`,
+                          "--gravity": `${particle.gravity}px`,
+                          "--drift": `${particle.drift}px`,
+                          "--particle-size": `${particle.size}px`,
+                          "--duration": `${particle.duration}s`,
+                          "--delay": `${particle.delay}s`,
+                          "--spin-start": `${particle.spinStart}deg`,
+                          "--spin-speed": `${particle.spinSpeed}deg`
                         } as CSSProperties}
                       />
                     ))}
@@ -2322,7 +2628,7 @@ export default function Page() {
           <div className={`battle-flash ${bossDefeatFlashing ? "boss-defeat-flash" : ""}`} aria-hidden />
 
           <div className="battle-stage-shell">
-            <div className={`boss-stage ${bossEntranceActive ? "boss-entrance" : ""} ${bossDefeatFlashing ? "boss-defeat" : ""}`} role="presentation">
+            <div className={`boss-stage ${bossEntranceActive ? "boss-entrance" : ""} ${bossDefeatFlashing ? "boss-defeat" : ""} ${finalPhase ? "final-phase" : ""} ${phaseDrama ? "phase-drama" : ""}`} role="presentation">
               <div className="boss-stage-header">
                 <div className="battle-boss-copy">
                   <span className="battle-scene-kicker">Keeper arena</span>
@@ -2491,6 +2797,16 @@ export default function Page() {
               <div className="victory-hero">
                 <div className="victory-banner">Victory!</div>
                 <p className="victory-subtitle">Keeper down. Your streak, focus, and kindness won the arena.</p>
+                <div className="reaction-stage victory-stage" aria-hidden="true">
+                  <div className="keeper-stance">
+                    <KeeperCharacter phase="phase-3" size="small" className="keeper-reaction" />
+                    <p className="keeper-reaction-line">Well fought! The Keeper is proud of your steady kindness.</p>
+                  </div>
+                  <div className="player-stance">
+                    <PlayerCharacter outfit={summaryOutfit} size="small" className="player-reaction hero-victory" />
+                    <p className="player-reaction-line">Gold shimmer surrounds your victory pose.</p>
+                  </div>
+                </div>
                 <div className="rank-badge victory-rank-badge">
                   <span className="rank-icon" aria-hidden>{currentTier.icon}</span>
                   <div>
@@ -2517,12 +2833,40 @@ export default function Page() {
                   </div>
                 </div>
                 <button className="big-btn hero-btn" onClick={startGame}>Play Again</button>
-                <div className="confetti-shower" aria-hidden />
+                <div className="confetti-shower" aria-hidden>
+                  {confettiPieces.map((piece) => (
+                    <span
+                      key={piece.id}
+                      className="confetti-piece"
+                      style={{
+                        left: `${piece.startLeft}%`,
+                        "--drift": `${piece.drift}px`,
+                        "--duration": `${piece.duration}s`,
+                        "--delay": `${piece.delay}s`,
+                        "--spin-speed": `${piece.spinSpeed}deg`,
+                        "--size": `${piece.size}px`,
+                        "--confetti-color": piece.color,
+                        "--tilt-angle": `${piece.tilt}deg`,
+                        "--wave-offset": `${piece.wave}px`
+                      } as CSSProperties}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="defeat-hero">
                 <div className="defeat-banner">Try again!</div>
                 <p className="defeat-message">You battled bravely. Keep your streak in mind and come back stronger.</p>
+                <div className="reaction-stage defeat-stage" aria-hidden="true">
+                  <div className="keeper-stance">
+                    <KeeperCharacter phase="phase-2" size="small" className="keeper-reaction keeper-triumph" />
+                    <p className="keeper-reaction-line">The Keeper grows stronger... so do you!</p>
+                  </div>
+                  <div className="player-stance">
+                    <PlayerCharacter outfit={summaryOutfit} size="small" className="player-reaction player-defeat" />
+                    <p className="player-reaction-line">A little shaken, yet still determined.</p>
+                  </div>
+                </div>
                 <div className="defeat-tier">
                   <span className="tier-icon" aria-hidden>{currentTier.icon}</span>
                   <div>
