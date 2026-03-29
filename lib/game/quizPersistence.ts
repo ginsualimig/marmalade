@@ -410,13 +410,11 @@ export const recordQuestionAttempt = (
     attemptCount
   });
   
-  // Update hint tracker
+  // Update hint tracker (cumulative — wrong answers accumulate across the session)
   if (!wasCorrect) {
     diagnostics.hintTracker[familyId] = (diagnostics.hintTracker[familyId] ?? 0) + 1;
-  } else {
-    // Reset hint counter on success
-    diagnostics.hintTracker[familyId] = 0;
   }
+  // NOTE: do NOT reset on correct — hints should be cumulative per family
   
   // Update interleaving state
   if (familyId === diagnostics.interleavingState.consecutiveFromFamily) {
@@ -427,25 +425,28 @@ export const recordQuestionAttempt = (
   }
   diagnostics.interleavingState.lastFamilyAsked = familyId;
   
-  // Update spaced repetition queue
+  // Update spaced repetition queue — increment at the START of the attempt
+  // so currentTurn represents the turn the question was asked on,
+  // making slot.targetTurn <= currentTurn checks land on the right turn.
   diagnostics.spacedRepetitionQueue.currentTurn++;
-  
+  const turn = diagnostics.spacedRepetitionQueue.currentTurn;
+
   // If correct, reserve this family for a future slot (8–12 turns out)
   if (wasCorrect && records.length >= 3) { // Mark as "learned" after 3 correct
     const existingSlot = diagnostics.spacedRepetitionQueue.slots.find(s => s.familyId === familyId);
     const spacingInterval = 8 + Math.floor(Math.random() * 5); // 8–12
-    const targetTurn = diagnostics.spacedRepetitionQueue.currentTurn + spacingInterval;
+    const targetTurn = turn + spacingInterval;
     
     if (existingSlot) {
       existingSlot.targetTurn = targetTurn;
-      existingSlot.lastAskedAt = diagnostics.spacedRepetitionQueue.currentTurn;
+      existingSlot.lastAskedAt = turn;
       existingSlot.confidenceLevel = Math.min(100, existingSlot.confidenceLevel + 10);
     } else {
       diagnostics.spacedRepetitionQueue.slots.push({
         familyId,
-        reservedAtTurn: diagnostics.spacedRepetitionQueue.currentTurn,
+        reservedAtTurn: turn,
         targetTurn,
-        lastAskedAt: diagnostics.spacedRepetitionQueue.currentTurn,
+        lastAskedAt: turn,
         confidenceLevel: 50
       });
     }
@@ -454,10 +455,10 @@ export const recordQuestionAttempt = (
 
 /**
  * Check if a hint should be shown for a family.
- * Returns true if 2+ wrong answers without a correct answer yet.
+ * Returns true after 1 or more cumulative wrong answers for that family in the session.
  */
 export const shouldShowHint = (diagnostics: RunDiagnostics, familyId: ConceptFamily): boolean => {
-  return (diagnostics.hintTracker[familyId] ?? 0) >= 2;
+  return (diagnostics.hintTracker[familyId] ?? 0) >= 1;
 };
 
 /**
@@ -527,9 +528,10 @@ export const generateGrowthSummary = (diagnostics: RunDiagnostics): GrowthSummar
     accuracyByFamily[familyId] = { correct, total, percentage };
   });
   
-  // Count hints shown and interleaving injections
+  // Count hints shown: sum total wrong attempts across families
+  // (hint triggers after 1st wrong per family, so total wrongs ≈ total hint opportunities)
   Object.values(diagnostics.hintTracker).forEach(count => {
-    hintsShown += Math.floor(count / 2); // one hint per 2 wrongs
+    hintsShown += count;
   });
   
   // Count interleaving injections (rough estimate: times consecutive count reset)

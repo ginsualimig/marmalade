@@ -34,6 +34,7 @@ import {
   recordQuestionAttempt,
   shouldShowHint,
   generateGrowthSummary,
+  getNextFamilyByPedagogy,
   loadDiagnostics,
   saveDiagnostics,
   clearDiagnostics,
@@ -57,6 +58,12 @@ import {
   type CharacterGender,
   type AppearanceCategory
 } from "@/lib/game/characterState";
+import {
+  recordProgressForRun,
+  getProgressByFamily,
+  clearProgressHistory,
+  type FamilyProgressGroup
+} from "@/lib/game/progressTracker";
 import {
   MODE_CONFIG_FROM_CURRICULUM as MODE_CONFIGS,
   MODE_CURRICULUM_CLUSTERS,
@@ -275,7 +282,20 @@ const MODE_DECOR: Record<DifficultyMode, { icon: string; badge: string }> = {
   comet: { icon: "☄️", badge: "Big Brain Mode" }
 };
 
-const QUESTION_TIME_LIMIT = 60;
+/**
+ * Timer tiers by difficulty mode (seconds per question).
+ * Sprout (K1–P1): 90s — younger children need more processing time.
+ * Spark (P2–P4): 60s — standard cadence.
+ * Comet (P5–P6): 45s — older children handle tighter pacing.
+ */
+const QUESTION_TIME_TIERS: Record<DifficultyMode, number> = {
+  sprout: 90,
+  spark: 60,
+  comet: 45
+};
+
+const getQuestionTimeLimit = (mode: DifficultyMode): number =>
+  QUESTION_TIME_TIERS[mode];
 const PHASE_FLASH_DURATION = 220;
 const PHASE_DRAMA_DURATION = 950;
 const PHASE_BANNER_DURATION = 950;
@@ -442,7 +462,7 @@ const normalizeAnswer = (question: Question, value: string) => {
   return trimmed.toLowerCase();
 };
 
-function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, round: number, stageId: StageId): Question {
+function createSpellingQuestion(config: ModeConfig, mode: DifficultyMode, level: LearnerLevel, round: number, stageId: StageId, _familyOverride?: ConceptFamily): Question {
   const tuning = LEVEL_TUNING[level];
   const plan = CURATED_PLANS[mode];
   const stageWords = STAGE_CURRICULUM[stageId].sampleLexicon;
@@ -505,7 +525,8 @@ function createMathQuestion(
   level: LearnerLevel,
   round: number,
   bossPhase: BossPhase = "phase-1",
-  stageId: StageId
+  stageId: StageId,
+  _familyOverride?: ConceptFamily
 ): Question {
   const tuning = LEVEL_TUNING[level];
   const plan = CURATED_PLANS[mode];
@@ -557,6 +578,7 @@ function createMathQuestion(
  * Create a question with pedagogy awareness.
  * Uses autonomy mode (maths/words/mix) to weight question selection.
  * Uses spaced repetition and interleaving logic from diagnostics to choose concept family.
+ * When the SR queue returns a family (due for review), that family takes priority.
  */
 function createQuestion(
   boss: Boss,
@@ -566,18 +588,61 @@ function createQuestion(
   level: LearnerLevel,
   bossPhase: BossPhase = "phase-1",
   autonomyMode: "maths" | "words" | "mix" = "mix",
-  _diagnostics?: RunDiagnostics
+  diagnostics?: RunDiagnostics
 ): Question {
   const plan = CURATED_PLANS[mode];
   const stageId = getSelectedStageId(mode, level);
-  const isMathsRound =
-    autonomyMode === "maths" ? true :
-    autonomyMode === "words" ? false :
-    Math.random() < plan.mathBias;
 
-  return isMathsRound
-    ? createMathQuestion(boss, config, mode, level, round, bossPhase, stageId)
-    : createSpellingQuestion(config, mode, level, round, stageId);
+  // Determine available families for this autonomy mode
+  const mathFamilies: ConceptFamily[] = [
+    "math-add-subtract",
+    "math-missing-number",
+    "math-two-step",
+    "math-multiplication"
+  ];
+  const spellingFamilies: ConceptFamily[] = [
+    "spelling-missing-letter",
+    "spelling-beginning-sound",
+    "spelling-word-ending",
+    "spelling-letter-count",
+    "spelling-vowel-sound",
+    "spelling-unscramble"
+  ];
+  const availableFamilies: ConceptFamily[] =
+    autonomyMode === "maths"
+      ? mathFamilies
+      : autonomyMode === "words"
+        ? spellingFamilies
+        : [...mathFamilies, ...spellingFamilies];
+
+  // Get SR recommendation (may be null = use RNG fallback)
+  const srFamily = diagnostics
+    ? getNextFamilyByPedagogy(availableFamilies, diagnostics)
+    : null;
+
+  let isMathsRound: boolean;
+
+  if (srFamily && mathFamilies.includes(srFamily)) {
+    // SR queue says this family is due — honour it regardless of mix bias
+    isMathsRound = true;
+    return createMathQuestion(boss, config, mode, level, round, bossPhase, stageId, srFamily);
+  } else if (srFamily && spellingFamilies.includes(srFamily)) {
+    // SR queue says this spelling family is due
+    isMathsRound = false;
+    return createSpellingQuestion(config, mode, level, round, stageId, srFamily);
+  } else {
+    // No SR override — use autonomy mode RNG
+    isMathsRound =
+      autonomyMode === "maths"
+        ? true
+        : autonomyMode === "words"
+          ? false
+          : Math.random() < plan.mathBias;
+
+    return isMathsRound
+      ? createMathQuestion(boss, config, mode, level, round, bossPhase, stageId)
+      : createSpellingQuestion(config, mode, level, round, stageId);
+  }
 }
 
 const createInitialSkillProgress = (): Record<SkillArea, SkillProgress> => ({
@@ -643,7 +708,7 @@ const createBossCheckpoint = (bossIndex: number, mode: DifficultyMode, level: Le
   };
 };
 
-type Screen = "onboarding" | "character-creation" | "title" | "battle" | "summary" | "settings" | "parental-controls";
+type Screen = "onboarding" | "character-creation" | "title" | "battle" | "summary" | "settings" | "parental-controls" | "progress";
 
 type ToneNote = {
   freq: number;
@@ -1068,6 +1133,156 @@ declare global {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   ProgressScreen — Longitudinal progress view for parents
+   Shows per-skill-family accuracy across all past sessions.
+   ───────────────────────────────────────────────────────────────────────────── */
+const SKILL_LABELS_PROGRESS: Record<string, string> = {
+  "spelling-missing-letter": "Missing letters",
+  "spelling-beginning-sound": "Beginning sounds",
+  "spelling-word-ending": "Word endings",
+  "spelling-letter-count": "Letter counting",
+  "spelling-vowel-sound": "Vowel sounds",
+  "spelling-unscramble": "Unscramble words",
+  "math-add-subtract": "Addition & subtraction",
+  "math-missing-number": "Missing-number sums",
+  "math-two-step": "Two-step maths",
+  "math-multiplication": "Multiplication facts"
+};
+
+const TREND_ICON: Record<string, string> = {
+  improving: "📈",
+  declining: "📉",
+  stable: "➡️"
+};
+
+const PROGRESS_BAR_COLORS: Record<string, string> = {
+  improving: "#51cf66",
+  declining: "#ff922b",
+  stable: "#74c0fc"
+};
+
+type ProgressScreenProps = {
+  onBack: () => void;
+};
+
+function ProgressScreen({ onBack }: ProgressScreenProps) {
+  const [familyGroups, setFamilyGroups] = useState<FamilyProgressGroup[]>([]);
+  const [cleared, setCleared] = useState(false);
+
+  useEffect(() => {
+    setFamilyGroups(getProgressByFamily());
+  }, []);
+
+  const handleClear = () => {
+    if (window.confirm("Clear all progress history? This cannot be undone.")) {
+      clearProgressHistory();
+      setFamilyGroups([]);
+      setCleared(true);
+    }
+  };
+
+  const formatDate = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  if (cleared) {
+    return (
+      <section className="card center-stack">
+        <h2>📊 Progress Tracker</h2>
+        <p>All progress history has been cleared.</p>
+        <button className="ghost-btn" onClick={onBack}>Back to Title</button>
+      </section>
+    );
+  }
+
+  if (familyGroups.length === 0) {
+    return (
+      <section className="card center-stack">
+        <h2>📊 Progress Tracker</h2>
+        <p>No sessions recorded yet.</p>
+        <p style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+          Complete a few quiz sessions and their skill-family results will appear here.
+        </p>
+        <button className="big-btn" onClick={onBack}>Back to Title</button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card progress-screen-card">
+      <div className="progress-screen-header">
+        <h2>📊 Progress Tracker</h2>
+        <p className="progress-screen-subtitle">
+          Accuracy by skill family across {familyGroups.reduce((sum, g) => Math.max(sum, g.latestSession), 0)} sessions
+        </p>
+      </div>
+
+      <div className="progress-family-list">
+        {familyGroups.map((group) => (
+          <div key={group.familyId} className="progress-family-card">
+            <div className="progress-family-header">
+              <span className="progress-family-name">
+                {SKILL_LABELS_PROGRESS[group.familyId] ?? group.familyId}
+              </span>
+              <span className="progress-trend-badge" title={`Trend: ${group.trend}`}>
+                {TREND_ICON[group.trend]} {group.sessionCount} sess.
+              </span>
+            </div>
+
+            {/* Simple inline bar for latest accuracy */}
+            <div className="progress-bar-row">
+              <span className="progress-bar-label">Latest</span>
+              <div className="progress-bar-track">
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: `${group.latestAccuracy}%`,
+                    background: PROGRESS_BAR_COLORS[group.trend]
+                  }}
+                />
+              </div>
+              <span className="progress-bar-value">{group.latestAccuracy}%</span>
+            </div>
+
+            {/* Session-by-session list */}
+            <div className="progress-session-list">
+              {group.entries.map((entry) => (
+                <div key={entry.id} className="progress-session-row">
+                  <span className="progress-session-num">S{entry.sessionNumber}</span>
+                  <span className="progress-session-date">{formatDate(entry.playedAt)}</span>
+                  <span className="progress-session-mode">{entry.mode}</span>
+                  <div className="progress-session-bar-track">
+                    <div
+                      className="progress-session-bar-fill"
+                      style={{
+                        width: `${entry.accuracy}%`,
+                        background: entry.accuracy >= 80 ? "#51cf66" : entry.accuracy >= 60 ? "#ffd43b" : "#ff6b6b"
+                      }}
+                    />
+                  </div>
+                  <span className="progress-session-accuracy">{entry.accuracy}%</span>
+                  <span className="progress-session-detail">
+                    {entry.correct}/{entry.attempts}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="progress-screen-actions">
+        <button className="ghost-btn danger-btn" onClick={handleClear}>
+          Clear History
+        </button>
+        <button className="big-btn" onClick={onBack}>Back to Title</button>
+      </div>
+    </section>
+  );
+}
+
 export default function Page() {
   const [initial] = useState<InitialState>(() => {
     if (typeof window === "undefined") {
@@ -1125,7 +1340,7 @@ export default function Page() {
   const [result, setResult] = useState<"victory" | "game-over" | null>(null);
   const [voiceLine, setVoiceLine] = useState<string>("Pick a mode and begin your bright quiz quest!");
   const handledTimeoutKeyRef = useRef<string | null>(null);
-  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(QUESTION_TIME_LIMIT);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(() => getQuestionTimeLimit(mode));
   const [timeoutFlash, setTimeoutFlash] = useState<boolean>(false);
   const [comboBrokenFlash, setComboBrokenFlash] = useState<boolean>(false);
   const comboBrokenTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -1417,8 +1632,8 @@ export default function Page() {
   };
   const summaryOutfit = character?.appearance ?? summaryFallbackAppearance;
   const questionTimerKey = `${screen}-${battle.phase}-${battle.bossIndex}-${battle.round}-${battle.question.prompt}`;
-  const timerPercent = Math.max(0, Math.min(100, (questionTimeLeft / QUESTION_TIME_LIMIT) * 100));
-  const timerUrgency = getTimerUrgencyLevel(Math.max(0, questionTimeLeft), QUESTION_TIME_LIMIT);
+  const timerPercent = Math.max(0, Math.min(100, (questionTimeLeft / getQuestionTimeLimit(mode)) * 100));
+  const timerUrgency = getTimerUrgencyLevel(Math.max(0, questionTimeLeft), getQuestionTimeLimit(mode));
   const timerUrgent = timerUrgency === "urgent" || timerUrgency === "critical";
   const timerCritical = timerUrgency === "critical";
   const celebrationClass = celebrationShake ? `celebration-${celebrationShake.type}` : "";
@@ -1596,7 +1811,7 @@ export default function Page() {
 
   const resetQuestionTimer = () => {
     handledTimeoutKeyRef.current = null;
-    setQuestionTimeLeft(QUESTION_TIME_LIMIT);
+    setQuestionTimeLeft(getQuestionTimeLimit(mode));
     setTimeoutFlash(false);
   };
 
@@ -1789,6 +2004,9 @@ export default function Page() {
     updateHighScore(finalScore, mode);
     appendSummary(runResult, mode, finalBattle, finalScore);
 
+    // Record per-family accuracy for longitudinal progress tracking
+    recordProgressForRun(mode, finalBattle.stats.skillProgress);
+
     // Generate growth summary from pedagogical diagnostics
     if (diagnostics) {
       const summary = generateGrowthSummary(diagnostics);
@@ -1968,16 +2186,18 @@ export default function Page() {
       // Check if hint should be shown
       if (!isCorrect && shouldShowHint(updatedDiagnostics, battle.question.skillArea as ConceptFamily)) {
         const hints: Record<string, string> = {
-          "spelling-missing-letter": "💡 Tip: Sound out the word slowly. What letter fits?",
-          "spelling-beginning-sound": "💡 Tip: Listen to the first sound in your head.",
-          "spelling-word-ending": "💡 Tip: Think of other words with the same ending.",
-          "spelling-letter-count": "💡 Tip: Count each letter with your finger.",
-          "spelling-vowel-sound": "💡 Tip: Remember the vowels: A, E, I, O, U.",
-          "spelling-unscramble": "💡 Tip: Look for word patterns or common endings.",
-          "math-add-subtract": "💡 Tip: Use your fingers or draw circles to count.",
-          "math-missing-number": "💡 Tip: Count forward from the first number.",
-          "math-two-step": "💡 Tip: Do the first step, then use that answer for the second.",
-          "math-multiplication": "💡 Tip: Think of groups. 3 groups of 4 means 3 × 4."
+          // Spelling hints — each targets the specific cognitive strategy for that skill
+          "spelling-missing-letter": "💡 Say the whole word slowly in your head. Which sound is missing? That sound is written as one letter.",
+          "spelling-beginning-sound": "💡 Say the word aloud. What sound do you hear first? Pick the letter that makes that sound.",
+          "spelling-word-ending": "💡 Listen to the last part of the word. Many words share the same endings — like -ing, -er, or -tion.",
+          "spelling-letter-count": "💡 Point to each letter as you say it aloud. How many fingers do you have up by the end?",
+          "spelling-vowel-sound": "💡 Vowels are A, E, I, O, U (and sometimes Y!). Say the word again — which vowel sound do you hear?",
+          "spelling-unscramble": "💡 Look for any small words hidden inside the scrambled letters first (like 'at', 'in', 'an'), then build the rest.",
+          // Maths hints — each targets the specific procedure or number sense for that skill
+          "math-add-subtract": "💡 Use your fingers to count up or down. You can also draw dots to help you see the numbers.",
+          "math-missing-number": "💡 Try counting forward from the bigger number. For ? + 4 = 9, start at 4 and count up to 9 — how many steps?",
+          "math-two-step": "💡 Solve one step at a time. Find the answer to the first part, then use that number for the second part.",
+          "math-multiplication": "💡 Think of equal groups. 3 × 4 means 3 groups of 4. Try skip-counting by that number, or use facts you already know."
         };
         const hintMsg = hints[battle.question.skillArea] || "💡 Take a breath and try again!";
         setCurrentHintText(hintMsg);
@@ -2616,6 +2836,7 @@ export default function Page() {
           </div>
           <button className="big-btn" onClick={startGame}>Start Adventure</button>
           <button className="ghost-btn" onClick={() => setScreen("parental-controls")}>⚙️ Settings</button>
+          <button className="ghost-btn" onClick={() => setScreen("progress")}>📊 Progress</button>
         </section>
       )}
 
@@ -3126,6 +3347,10 @@ export default function Page() {
             )}
           </div>
         </section>
+      )}
+
+      {screen === "progress" && (
+        <ProgressScreen onBack={() => setScreen("title")} />
       )}
     </main>
     </>
